@@ -360,10 +360,9 @@ button:active {
 }
 
 /* ══════════════════════════════════════
-   PROSE EDITOR
+   PROSE & MARKDOWN EXACT STYLING
 ══════════════════════════════════════ */
-.ProseMirror {
-  /* font-size inherited from .editor-main-container inline style */
+:is(.ProseMirror, .markdown-preview) {
   font-size: inherit;
   font-family: inherit;
   min-height: 50vh;
@@ -382,40 +381,43 @@ button:active {
 }
 
 /* Prose headings: clean typographic hierarchy */
-.ProseMirror h1 {
+:is(.ProseMirror, .markdown-preview) h1 {
   font-size: 1.8em;
   font-weight: 800;
   margin: 1.5em 0 0.5em;
   letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
-.ProseMirror h2 {
+:is(.ProseMirror, .markdown-preview) h2 {
   font-size: 1.4em;
   font-weight: 700;
   margin: 1.2em 0 0.4em;
+  line-height: 1.3;
 }
 
-.ProseMirror h3 {
+:is(.ProseMirror, .markdown-preview) h3 {
   font-size: 1.1em;
   font-weight: 700;
   margin: 1em 0 0.3em;
+  line-height: 1.4;
 }
 
-.ProseMirror p {
+:is(.ProseMirror, .markdown-preview) p {
   margin: 0 0 1em 0;
 }
 
-.ProseMirror a {
+:is(.ProseMirror, .markdown-preview) a {
   color: #3d3d3d;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.ProseMirror a:hover {
+:is(.ProseMirror, .markdown-preview) a:hover {
   color: #111;
 }
 
-.ProseMirror blockquote {
+:is(.ProseMirror, .markdown-preview) blockquote {
   border-left: 3px solid #e0e0e0;
   padding-left: 16px;
   margin-left: 0;
@@ -423,43 +425,106 @@ button:active {
   font-style: italic;
 }
 
-.ProseMirror code {
+:is(.ProseMirror, .markdown-preview) code {
   background: #f4f4f5;
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 0.9em;
+  padding: 2.5px 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  color: #ef4444; /* red-ish for inline code */
 }
 
-.ProseMirror pre {
-  background: #f8f8f8;
-  border: 1px solid #eee;
-  border-radius: 8px;
+/* Pre-block (Code Block) - We override padding because highlighter component handles it, but keep it robust */
+:is(.ProseMirror, .markdown-preview) pre {
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   padding: 16px;
   overflow-x: auto;
+  margin: 1.5em 0;
 }
 
-.ProseMirror ul,
-.ProseMirror ol {
+:is(.ProseMirror, .markdown-preview) pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  border-radius: 0;
+}
+
+:is(.ProseMirror, .markdown-preview) ul {
   padding-left: 24px;
+  list-style-type: disc;
+  margin-bottom: 1em;
 }
 
-.ProseMirror li+li {
-  margin-top: 4px;
+:is(.ProseMirror, .markdown-preview) ol {
+  padding-left: 24px;
+  list-style-type: decimal;
+  margin-bottom: 1em;
 }
 
-.ProseMirror hr {
+:is(.ProseMirror, .markdown-preview) li+li {
+  margin-top: 6px;
+}
+
+:is(.ProseMirror, .markdown-preview) li > p {
+  margin-bottom: 0.5em; /* Less margin in lists */
+}
+
+:is(.ProseMirror, .markdown-preview) hr {
   border: none;
   border-top: 1px solid #f0f0f0;
   margin: 2em 0;
 }
 
+/* Prose table styles */
+:is(.ProseMirror, .markdown-preview) table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.95em;
+}
+
+:is(.ProseMirror, .markdown-preview) table td,
+:is(.ProseMirror, .markdown-preview) table th {
+  border: 1px solid #e5e7eb;
+  padding: 10px 14px;
+}
+
+:is(.ProseMirror, .markdown-preview) table th {
+  background: #f3f4f6;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* Task list styles (Tiptap + GFM Markdown Preview combined capability) */
+:is(.ProseMirror, .markdown-preview) ul[data-type="taskList"],
+:is(.ProseMirror, .markdown-preview) ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+:is(.ProseMirror, .markdown-preview) ul[data-type="taskList"] li,
+:is(.ProseMirror, .markdown-preview) li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+:is(.ProseMirror, .markdown-preview) ul[data-type="taskList"] li label,
+:is(.ProseMirror, .markdown-preview) li.task-list-item input[type="checkbox"] {
+  cursor: pointer;
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: #1a1a1a;
+}
 /* ══════════════════════════════════════
    CODEMIRROR CLEAN THEME
 ══════════════════════════════════════ */
 .cm-editor {
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-  /* font-size inherited from .editor-main-container inline style */
   outline: none !important;
   background: transparent !important;
 }
@@ -478,7 +543,6 @@ button:active {
 
 .cm-lineNumbers .cm-gutterElement {
   padding: 0 14px 0 8px;
-  /* right-padding gives breathing room to code */
   font-size: 11px;
   line-height: inherit;
 }
@@ -527,15 +591,8 @@ button:active {
    ANIMATIONS
 ══════════════════════════════════════ */
 @keyframes popIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* Utility: hide file inputs inside labels */
@@ -546,38 +603,4 @@ input[type="file"].hidden {
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
-}
-
-/* Prose table styles */
-.ProseMirror table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
-}
-
-.ProseMirror table td,
-.ProseMirror table th {
-  border: 1px solid #e0e0e0;
-  padding: 8px 12px;
-}
-
-.ProseMirror table th {
-  background: #f8f8f8;
-  font-weight: 700;
-}
-
-/* Task list */
-.ProseMirror ul[data-type="taskList"] {
-  list-style: none;
-  padding-left: 0;
-}
-
-.ProseMirror ul[data-type="taskList"] li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.ProseMirror ul[data-type="taskList"] li label {
-  cursor: pointer;
 }

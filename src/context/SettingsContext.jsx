@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 export const dictionary = {
   'en': {
     settingsTitle: 'Settings',
-    loginToAccount: 'Login to TomaGo Account',
+    loginToAccount: 'Login to TomaNotes',
     loginUnavailable: 'Login currently unavailable',
     accountSection: 'Account',
     crossDeviceSync: 'Cross-device Sync',
@@ -17,7 +17,11 @@ export const dictionary = {
     aboutSection: 'About',
     developer: 'Developer: douyin@idbetterrun',
     credits: 'Credits: Special thanks to Google Gemini, Claude, and ChatGPT.',
-    version: 'Version: v0.0.1',
+    creditsTitle: 'Credits',
+    profileLabel: 'Profile',
+    syncDescription: 'Sync your notes everywhere',
+    createdAt: 'Created at',
+    version: 'Version: 0.1 Beta 1',
     allNotes: 'All Notes',
     favorites: 'Favorites',
     trash: 'Trash',
@@ -58,10 +62,43 @@ export const dictionary = {
     confirmDelete: 'Confirm Delete',
     emptyTrash: 'Empty Trash',
     unlockToDelete: 'Please unlock the note before deleting.',
+    encryptNoteTitle: 'Encrypt Note',
+    unlockNoteTitle: 'Unlock Note',
+    pwEmptyErr: 'Password cannot be empty.',
+    pwLengthErr: 'Password must be at least 3 characters.',
+    encryptDesc: 'Set a password to encrypt this note. The content will be hidden from the sidebar preview until unlocked.',
+    unlockDesc: "Enter the password to unlock and view this note's content.",
+    setPwPlaceholder: 'Set a password…',
+    enterPwPlaceholder: 'Enter password…',
+    unlockBtn: 'Unlock',
+    editorPlaceholder: 'Start writing something amazing...',
+    securitySection: 'Security',
+    globalPin: 'Global PIN',
+    globalPinDesc: 'Require a 6-digit PIN to access TomaNotes',
+    changePin: 'Change PIN',
+    touchId: 'Touch ID / Biometrics',
+    touchIdDesc: 'Use fingerprint to quick unlock',
+    autoLockTime: 'Auto-Lock Time',
+    lockImmediate: 'Immediately',
+    lockNever: 'Never',
+    lockMins: 'minutes',
+    masterKey: 'Master Key Mode',
+    masterKeyDesc: 'Global PIN unlocks all encrypted notes directly',
+    appLocked: 'App Locked',
+    enterPinToUnlock: 'Enter your 6-digit PIN to continue',
+    incorrectPin: 'Incorrect PIN, please try again',
+    encryptedMask: '********',
+    encryptedNotes: 'Encrypted Notes',
+    unlockAll: 'Unlock All',
+    setPinTitle: 'Set Global PIN',
+    confirmPinTitle: 'Confirm PIN',
+    pinMismatch: 'PINs do not match, try again',
+    pinLengthPrompt: 'Enter 6 digits',
+    pinConfirmPrompt: 'Re-enter your PIN',
   },
   'zh-CN': {
     settingsTitle: '设置',
-    loginToAccount: '登录到 TomaGo',
+    loginToAccount: '登录到 TomaNotes',
     loginUnavailable: '暂不提供登录 (Login currently unavailable)',
     accountSection: '账户',
     crossDeviceSync: '跨设备同步',
@@ -74,7 +111,11 @@ export const dictionary = {
     aboutSection: '关于',
     developer: '开发者: douyin@idbetterrun',
     credits: '鸣谢: 特别感谢 Google Gemini, Claude, 和 ChatGPT.',
-    version: '版本: v0.0.1',
+    creditsTitle: '鸣谢',
+    profileLabel: '个人资料',
+    syncDescription: '在所有设备上同步您的笔记',
+    createdAt: '创建时间',
+    version: '版本: 0.1 Beta 1',
     allNotes: '所有笔记',
     favorites: '收藏夹',
     trash: '回收站',
@@ -115,10 +156,43 @@ export const dictionary = {
     confirmDelete: '确认删除',
     emptyTrash: '一键清空',
     unlockToDelete: '请先解锁笔记以进行删除操作。',
+    encryptNoteTitle: '加密笔记',
+    unlockNoteTitle: '解锁笔记',
+    pwEmptyErr: '密码不能为空。',
+    pwLengthErr: '密码至少需要3个字符。',
+    encryptDesc: '设置密码以加密此笔记。开启后未解锁前，该笔记内容将不会在侧边栏预览中显示。',
+    unlockDesc: '输入密码以解锁并查看此笔记的内容。',
+    setPwPlaceholder: '设置密码…',
+    enterPwPlaceholder: '输入密码…',
+    unlockBtn: '解锁',
+    editorPlaceholder: '妙笔生花...',
+    securitySection: '安全',
+    globalPin: '全局密码 (PIN)',
+    globalPinDesc: '开启 6 位数字密码保护整个应用',
+    changePin: '修改密码',
+    touchId: 'Touch ID 快速验证',
+    touchIdDesc: '允许使用触控 ID 快速解锁',
+    autoLockTime: '自动锁定时间',
+    lockImmediate: '立即',
+    lockNever: '永不',
+    lockMins: '分钟',
+    masterKey: '主钥匙特权',
+    masterKeyDesc: '开启后全局密码将能直接解锁所有单篇加密笔记',
+    appLocked: '应用已锁定',
+    enterPinToUnlock: '请输入 6 位数字 PIN 码以继续',
+    incorrectPin: 'PIN 码不正确，请重试',
+    encryptedMask: '内容已加密',
+    encryptedNotes: '已加密笔记',
+    unlockAll: '一键解锁',
+    setPinTitle: '设置全局 PIN 码',
+    confirmPinTitle: '请再输一次以确认',
+    pinMismatch: '密码不一致，请重试',
+    pinLengthPrompt: '请输入 6 位数字',
+    pinConfirmPrompt: '请确认您的密码',
   },
   'zh-TW': {
     settingsTitle: '設定',
-    loginToAccount: '登入到 TomaGo',
+    loginToAccount: '登入到 TomaNotes',
     loginUnavailable: '暫不提供登入 (Login currently unavailable)',
     accountSection: '帳戶',
     crossDeviceSync: '跨設備同步',
@@ -131,7 +205,11 @@ export const dictionary = {
     aboutSection: '關於',
     developer: '開發者: douyin@idbetterrun',
     credits: '鳴謝: 特別感謝 Google Gemini, Claude, 和 ChatGPT.',
-    version: '版本: v0.0.1',
+    creditsTitle: '鳴謝',
+    profileLabel: '個人資料',
+    syncDescription: '在所有設備上同步您的筆記',
+    createdAt: '創建時間',
+    version: '版本: 0.1 Beta 1',
     allNotes: '所有筆記',
     favorites: '收藏夾',
     trash: '回收站',
@@ -172,6 +250,39 @@ export const dictionary = {
     confirmDelete: '確認刪除',
     emptyTrash: '一鍵清空',
     unlockToDelete: '請先解鎖筆記以進行刪除操作。',
+    encryptNoteTitle: '加密筆記',
+    unlockNoteTitle: '解鎖筆記',
+    pwEmptyErr: '密碼不能為空。',
+    pwLengthErr: '密碼至少需要3個字元。',
+    encryptDesc: '設定密碼以加密此筆記。開啟後未解鎖前，該筆記內容將不會在側邊欄預覽中顯示。',
+    unlockDesc: '輸入密碼以解鎖並查看此筆記的內容。',
+    setPwPlaceholder: '設定密碼…',
+    enterPwPlaceholder: '輸入密碼…',
+    unlockBtn: '解鎖',
+    editorPlaceholder: '妙筆生花...',
+    securitySection: '安全',
+    globalPin: '全局密碼 (PIN)',
+    globalPinDesc: '開啟 6 位數字密碼保護整個應用',
+    changePin: '修改密碼',
+    touchId: 'Touch ID 快速驗證',
+    touchIdDesc: '允許使用觸控 ID 快速解鎖',
+    autoLockTime: '自動鎖定時間',
+    lockImmediate: '立即',
+    lockNever: '永不',
+    lockMins: '分鐘',
+    masterKey: '主鑰匙特權',
+    masterKeyDesc: '開啟後全局密碼將能直接解鎖所有單篇加密筆記',
+    appLocked: '應用已鎖定',
+    enterPinToUnlock: '請輸入 6 位數字 PIN 碼以繼續',
+    incorrectPin: 'PIN 碼不正確，請重試',
+    encryptedMask: '內容已加密',
+    encryptedNotes: '已加密筆記',
+    unlockAll: '一鍵解鎖',
+    setPinTitle: '設定全局 PIN 碼',
+    confirmPinTitle: '請再輸一次以確認',
+    pinMismatch: '密碼不一致，請重試',
+    pinLengthPrompt: '請輸入 6 位數字',
+    pinConfirmPrompt: '請確認您的密碼',
   }
 };
 
@@ -180,8 +291,15 @@ const SettingsContext = createContext();
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => {
     const savedSettings = localStorage.getItem('editor-settings');
-    const defaults = { showLineNumbers: true, syntaxHighlighting: true, fontSize: 15, language: 'en' };
-    return savedSettings ? { ...defaults, ...JSON.parse(savedSettings) } : defaults;
+    const defaults = { 
+      showLineNumbers: true, syntaxHighlighting: true, fontSize: 15, language: 'en',
+      globalPinEnabled: false, touchIdEnabled: false, autoLockTime: 2, masterKeyEnabled: false
+    };
+    if (!savedSettings) return defaults;
+    const parsed = JSON.parse(savedSettings);
+    // Migrate: "0" (Immediately) was removed — bump to 2 minutes
+    if (parsed.autoLockTime === 0) parsed.autoLockTime = 2;
+    return { ...defaults, ...parsed };
   });
 
   useEffect(() => {
@@ -206,12 +324,17 @@ export function SettingsProvider({ children }) {
     setSettings(prev => ({ ...prev, language: lang }));
   };
 
+  const updateSecuritySettings = (updates) => {
+    setSettings(prev => ({ ...prev, ...updates }));
+  };
+
   const value = { 
     settings, 
     toggleLineNumbers, 
     toggleSyntaxHighlighting, 
     updateFontSize,
-    setLanguage
+    setLanguage,
+    updateSecuritySettings
   };
 
   return (

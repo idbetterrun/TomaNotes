@@ -6,6 +6,8 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { Link } from '@tiptap/extension-link';
 import { Underline } from '@tiptap/extension-underline';
 import { Highlight } from '@tiptap/extension-highlight';
+import { Color } from '@tiptap/extension-color';
+import { TextStyle } from '@tiptap/extension-text-style';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
@@ -19,9 +21,12 @@ import LinkModal from './LinkModal';
 import {
   Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon,
   List, ListOrdered, Search, ImageIcon, FilePlus,
-  Strikethrough, Code, Quote,
+  Strikethrough, Code, Quote, Type,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
+import { useTranslation } from '../context/SettingsContext';
+
+
 
 // ── Font Size Extension ──────────────────────────────────────────────────────
 import { Mark } from '@tiptap/core';
@@ -41,7 +46,7 @@ const FontSize = Mark.create({
   },
 });
 
-const FONT_SIZES = ['12px', '14px', '16px', '18px', '24px'];
+const FONT_SIZES = ['12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px'];
 
 // ── toBase64 utility: converts a File to Base64 DataURL with error handling ──
 function toBase64(file) {
@@ -136,7 +141,7 @@ function EditorToolbar({ editor, onLinkClick }) {
       {/* Font Size Dropdown */}
       <select
         onChange={applyFontSize}
-        defaultValue=""
+        defaultValue="16px"
         style={{
           height: 28, padding: '0 6px', borderRadius: 5, border: '1px solid #e8e8e8',
           fontSize: 12, fontFamily: 'inherit', background: '#fff', color: '#444',
@@ -144,8 +149,7 @@ function EditorToolbar({ editor, onLinkClick }) {
         }}
         title="Font size"
       >
-        <option value="">Size</option>
-        {FONT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+        {FONT_SIZES.map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
       </select>
 
       <Divider />
@@ -170,16 +174,19 @@ function EditorToolbar({ editor, onLinkClick }) {
       <Divider />
 
       {/* Headings */}
-      {[1, 2, 3].map(level => (
-        <ToolbarBtn
-          key={level}
-          onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-          active={editor.isActive('heading', { level })}
-          title={`Heading ${level}`}
-        >
-          <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1 }}>H{level}</span>
-        </ToolbarBtn>
-      ))}
+      {[1, 2, 3].map((level, i) => {
+        const sizes = [17, 15, 13]; // visually distinct for the toolbar button
+        return (
+          <ToolbarBtn
+            key={level}
+            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+            active={editor.isActive('heading', { level })}
+            title={`Heading ${level}`}
+          >
+            <span style={{ fontSize: sizes[i], fontWeight: 800, lineHeight: 1 }}>H{level}</span>
+          </ToolbarBtn>
+        );
+      })}
 
       <Divider />
 
@@ -211,6 +218,27 @@ function EditorToolbar({ editor, onLinkClick }) {
       </ToolbarBtn>
 
       <Divider />
+
+      {/* Font Color Picker */}
+      <label title="Font color" style={{
+        padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex', position: 'relative',
+        alignItems: 'center', color: '#555', transition: 'background 0.12s',
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = '#f0f0f0'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      >
+        <Type size={15} style={{ color: editor.getAttributes('textStyle').color || '#000' }} />
+        <input
+          type="color"
+          onInput={e => {
+            const c = e.target.value;
+            if (c === '#000000' || c === '') editor.chain().focus().unsetColor().run();
+            else editor.chain().focus().setColor(c).run();
+          }}
+          value={editor.getAttributes('textStyle').color || '#000000'}
+          style={{ position: 'absolute', opacity: 0, inset: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+        />
+      </label>
 
       {/* Link — opens floating input instead of window.prompt */}
       <ToolbarBtn
@@ -250,17 +278,21 @@ function EditorToolbar({ editor, onLinkClick }) {
 
 // ── Rich Text Editor ─────────────────────────────────────────────────────────
 const RichTextEditor = ({ note, onChange }) => {
+  const { t } = useTranslation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [results, setResults] = useState([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [updateTick, setUpdateTick] = useState(0);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ history: { depth: 100 }, dropCursor: { color: '#4f46e5', width: 2 } }),
       Underline,
       Typography,
+      TextStyle,
+      Color,
       FontSize,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -270,11 +302,13 @@ const RichTextEditor = ({ note, onChange }) => {
       SearchHighlight,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Start writing something amazing...' }),
+      Placeholder.configure({ placeholder: t('editorPlaceholder') || 'Start writing something amazing...' }),
       CharacterCount,
     ],
     content: note.content,
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onUpdate: ({ editor }) => { onChange(editor.getHTML()); setUpdateTick(t => t + 1); },
+    onSelectionUpdate: () => setUpdateTick(t => t + 1),
+    onTransaction: () => setUpdateTick(t => t + 1),
     editorProps: {
       attributes: {
         class: 'prose focus:outline-none max-w-none text-slate-800 leading-relaxed caret-indigo-600 min-h-[400px]',
@@ -314,7 +348,9 @@ const RichTextEditor = ({ note, onChange }) => {
     });
     setResults(newResults);
     setCurrentIndex(newResults.length > 0 ? 0 : -1);
-    if (newResults.length > 0) editor.commands.focus(newResults[0].start);
+    if (newResults.length > 0) {
+      editor.chain().setTextSelection(newResults[0].start).scrollIntoView().run();
+    }
     editor.view.dispatch(editor.state.tr.setMeta('searchHighlight', { searchTerm: term, currentIndex: 0 }));
   }, [editor]);
 
@@ -322,7 +358,7 @@ const RichTextEditor = ({ note, onChange }) => {
     if (results.length === 0) return;
     const next = (currentIndex + dir + results.length) % results.length;
     setCurrentIndex(next);
-    editor.commands.focus(results[next].start);
+    editor.chain().setTextSelection(results[next].start).scrollIntoView().run();
     editor.view.dispatch(editor.state.tr.setMeta('searchHighlight', { searchTerm, currentIndex: next }));
   };
 
@@ -336,7 +372,7 @@ const RichTextEditor = ({ note, onChange }) => {
         initialUrl={editor?.getAttributes('link')?.href || ''}
       />
 
-      <EditorToolbar editor={editor} onLinkClick={handleLinkClick} />
+      <EditorToolbar editor={editor} onLinkClick={handleLinkClick} tick={updateTick} />
 
       {editor && (
         <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }}>

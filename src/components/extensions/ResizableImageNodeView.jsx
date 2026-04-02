@@ -39,12 +39,12 @@ const ResizableImageNodeView = ({ node, updateAttributes, selected }) => {
           onDragStop={handleDragStop}
           lockAspectRatio={true}
           dragAxis="none" // Stick to text flow but allow resize
-          enableResizing={{
+          enableResizing={selected ? {
             topRight: true,
             bottomRight: true,
             bottomLeft: true,
             topLeft: true,
-          }}
+          } : false}
           resizeHandleClasses={{
             topRight: 'w-3 h-3 bg-white border-2 border-blue-500 rounded-full !-top-1.5 !-right-1.5',
             bottomRight: 'w-3 h-3 bg-white border-2 border-blue-500 rounded-full !-bottom-1.5 !-right-1.5',

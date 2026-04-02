@@ -11,6 +11,23 @@ import { Search, Download, Circle, CheckCircle2 } from 'lucide-react';
 import { RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+
+SyntaxHighlighter.registerLanguage('javascript', js);
+SyntaxHighlighter.registerLanguage('jsx', jsx);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('rust', rust);
 
 // Cleaner Image Decorator for CM6 Markdown
 const imagePlugin = ViewPlugin.fromClass(class {
@@ -104,10 +121,35 @@ const MarkdownEditor = ({ note, onChange }) => {
       <div style={{ flex: 1, overflow: 'visible' }}>
         {isPreview ? (
           <div
-            className="prose"
+            className="prose markdown-preview"
             style={{ maxWidth: 'none', fontSize: 'inherit', lineHeight: 1.6 }}
           >
-            <ReactMarkdown>{note.content}</ReactMarkdown>
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]} 
+              rehypePlugins={[rehypeRaw]}
+              components={{
+                code({ node, inline, className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  return !inline && match ? (
+                    <SyntaxHighlighter
+                      style={oneLight}
+                      language={match[1]}
+                      PreTag="div"
+                      customStyle={{ margin: 0, padding: 16, background: 'transparent', border: 'none' }}
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+              }}
+            >
+              {note.content}
+            </ReactMarkdown>
           </div>
         ) : (
           <CodeMirror
