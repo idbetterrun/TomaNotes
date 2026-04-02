@@ -66,7 +66,7 @@
 ### Installation / 安装
 ```bash
 # Clone the repository
-git clone [https://github.com/idbetterrun/TomaNotes.git](https://github.com/your-username/TomaNotes.git)
+git clone [https://github.com/idbetterrun/TomaNotes.git](https://github.com/idbetterrun/TomaNotes.git)
 
 # Install dependencies
 npm install
