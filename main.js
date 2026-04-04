@@ -4,6 +4,8 @@ const fs = require('fs');
 
 const userDataPath = app.getPath('userData');
 const settingsPath = path.join(userDataPath, 'security.json');
+let currentUiLanguage = 'zh-CN';
+let mainWindow = null;
 
 function saveSecurityConfig(data) {
     const existing = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
@@ -13,12 +15,28 @@ function getSecurityConfig() {
     return fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
 }
 
-function createWindow() {
+function buildWindowUrl(noteId, detached) {
+    const isDev = !app.isPackaged;
+    const search = new URLSearchParams();
+    if (noteId) search.set('note', String(noteId));
+    if (detached) search.set('detached', '1');
+
+    if (isDev) {
+        return [`http://localhost:5173/?${search.toString()}`, `http://localhost:5174/?${search.toString()}`];
+    }
+
+    return [path.join(__dirname, 'dist/index.html')];
+}
+
+function createWindow(options = {}) {
+    const { noteId = null, detached = false } = options;
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
         title: "TomaNotes", // 任务栏显示的标题
         icon: path.join(__dirname, 'public/icon.ico'), // 给你的 Windows 版加个图标
+        titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
+        trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 32 } : undefined,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -30,36 +48,75 @@ function createWindow() {
     // Menu.setApplicationMenu(null); 
 
     const isDev = !app.isPackaged;
+    const targets = buildWindowUrl(noteId, detached);
+
+    if (!detached) {
+        mainWindow = win;
+    }
 
     if (isDev) {
-        // 智能侦测 Vite 端口，增加容错
-        win.loadURL('http://localhost:5173').catch(() => {
-            win.loadURL('http://localhost:5174').catch(() => {
+        win.loadURL(targets[0]).catch(() => {
+            win.loadURL(targets[1]).catch(() => {
                 win.loadFile(path.join(__dirname, 'dist/index.html'));
             });
         });
         // 开发模式自动打开调试工具
         win.webContents.openDevTools();
     } else {
-        win.loadFile(path.join(__dirname, 'dist/index.html'));
+        win.loadFile(targets[0]);
     }
 
     win.webContents.on('context-menu', (event, params) => {
+        const labels = currentUiLanguage === 'en'
+            ? {
+                undo: 'Undo',
+                redo: 'Redo',
+                cut: 'Cut',
+                copy: 'Copy',
+                paste: 'Paste',
+                pasteMatch: 'Paste and Match Style',
+                del: 'Delete',
+                selectAll: 'Select All',
+                services: 'Services',
+            }
+            : currentUiLanguage === 'zh-TW'
+            ? {
+                undo: '復原',
+                redo: '重做',
+                cut: '剪下',
+                copy: '複製',
+                paste: '貼上',
+                pasteMatch: '貼上並符合樣式',
+                del: '刪除',
+                selectAll: '全選',
+                services: '服務',
+            }
+            : {
+                undo: '撤销',
+                redo: '重做',
+                cut: '剪切',
+                copy: '复制',
+                paste: '粘贴',
+                pasteMatch: '粘贴并匹配样式',
+                del: '删除',
+                selectAll: '全选',
+                services: '服务',
+            };
         const template = [
-            { role: 'undo' },
-            { role: 'redo' },
+            { label: labels.undo, accelerator: 'CmdOrCtrl+Z', click: () => win.webContents.undo() },
+            { label: labels.redo, accelerator: 'Shift+CmdOrCtrl+Z', click: () => win.webContents.redo() },
             { type: 'separator' },
-            { role: 'cut' },
-            { role: 'copy' },
-            { role: 'paste' },
-            { role: 'pasteAndMatchStyle' },
-            { role: 'delete' },
-            { role: 'selectAll' }
+            { label: labels.cut, accelerator: 'CmdOrCtrl+X', role: 'cut' },
+            { label: labels.copy, accelerator: 'CmdOrCtrl+C', role: 'copy' },
+            { label: labels.paste, accelerator: 'CmdOrCtrl+V', role: 'paste' },
+            { label: labels.pasteMatch, accelerator: 'Shift+CmdOrCtrl+V', role: 'pasteAndMatchStyle' },
+            { label: labels.del, role: 'delete' },
+            { label: labels.selectAll, accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
         ];
         
         if (process.platform === 'darwin') {
             template.push({ type: 'separator' });
-            template.push({ role: 'services' });
+            template.push({ label: labels.services, role: 'services' });
         }
 
         const menu = Menu.buildFromTemplate(template);
@@ -114,6 +171,28 @@ ipcMain.handle('security:prompt-touch-id', async (event, reason) => {
 ipcMain.handle('security:can-prompt-touch-id', () => {
     if (process.platform !== 'darwin') return false;
     return systemPreferences.canPromptTouchID();
+});
+
+ipcMain.on('ui:set-language', (_event, language) => {
+    currentUiLanguage = language || 'zh-CN';
+});
+
+ipcMain.handle('window:detach-note', (_event, noteId) => {
+    createWindow({ noteId, detached: true });
+    return true;
+});
+
+ipcMain.handle('window:restore-note', (event) => {
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+    }
+    if (sourceWindow && sourceWindow !== mainWindow && !sourceWindow.isDestroyed()) {
+        sourceWindow.close();
+    }
+    return true;
 });
 
 // --- macOS 专属生命周期处理 ---

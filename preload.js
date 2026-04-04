@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld('electron', {
     },
     system: {
         onBlur: (callback) => ipcRenderer.on('window-blur', callback),
-        onFocus: (callback) => ipcRenderer.on('window-focus', callback)
+        onFocus: (callback) => ipcRenderer.on('window-focus', callback),
+        setLanguage: (language) => ipcRenderer.send('ui:set-language', language)
+    },
+    window: {
+        detachNote: (noteId) => ipcRenderer.invoke('window:detach-note', noteId),
+        restoreNote: () => ipcRenderer.invoke('window:restore-note')
     }
 });

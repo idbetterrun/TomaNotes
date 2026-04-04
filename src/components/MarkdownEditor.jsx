@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { githubLight } from '@uiw/codemirror-theme-github';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings, useTranslation } from '../context/SettingsContext';
 import SearchModule from './SearchModule';
-import { ViewPlugin, Decoration } from '@codemirror/view';
-import { search, findNext, findPrevious, openSearchPanel } from '@codemirror/search';
-import { Search, Download, Circle, CheckCircle2 } from 'lucide-react';
+import { ViewPlugin, Decoration, EditorView, scrollPastEnd } from '@codemirror/view';
+import { findNext, findPrevious } from '@codemirror/search';
 import { RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
+import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
@@ -58,16 +58,46 @@ const imagePlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations });
 
-const MarkdownEditor = ({ note, onChange }) => {
+const MarkdownEditor = ({ note, onChange, onTitleChange, isPreview, isSearchOpen, onCloseSearch, onActionsChange }) => {
   const { settings } = useSettings();
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isPreview, setIsPreview] = useState(false);
+  const { t } = useTranslation();
   const editorViewRef = useRef(null);
+
+  const emitActions = useCallback((view) => {
+    if (!onActionsChange) return;
+    if (!view) {
+      onActionsChange({ canUndo: false, canRedo: false, undo: null, redo: null });
+      return;
+    }
+    onActionsChange({
+      canUndo: undoDepth(view.state) > 0,
+      canRedo: redoDepth(view.state) > 0,
+      undo: () => undo(view),
+      redo: () => redo(view),
+    });
+  }, [onActionsChange]);
 
   const extensions = [
     markdown({ base: markdownLanguage, codeLanguages: languages }),
-    search({ top: true }),
     imagePlugin,
+    EditorView.lineWrapping,
+    scrollPastEnd(),
+    EditorView.theme({
+      '&': { height: '100%', minHeight: '400px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)' },
+      '.cm-scroller': { 
+        overflow: 'auto', 
+        outline: 'none',
+        paddingBottom: '20vh', 
+      },
+      '.cm-content': { 
+        paddingTop: '32px',
+        minHeight: '100% '
+      },
+      '.cm-cursor': { borderLeftColor: 'var(--text-main)' },
+      '.cm-selectionBackground, .cm-content ::selection': { backgroundColor: 'var(--accent)', opacity: 0.2 },
+      '.cm-activeLine': { backgroundColor: 'var(--bg-secondary)', opacity: 0.5 },
+      '.cm-line': { padding: '0 4px', color: 'var(--text-main)' }
+    })
   ];
 
   const handleNext = () => editorViewRef.current && findNext(editorViewRef.current);
@@ -75,42 +105,20 @@ const MarkdownEditor = ({ note, onChange }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
-      {/* Clean horizontal toolbar — sits below the H1 title in AppJsx */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        marginBottom: 24, paddingBottom: 16,
-        borderBottom: '1px solid #f0f0f0',
-      }}>
-        {/* Preview toggle */}
-        <button
-          onClick={() => setIsPreview(!isPreview)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-            background: isPreview ? '#1a1a1a' : '#f4f4f5',
-            color: isPreview ? '#fff' : '#555',
-            border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-          }}
-        >
-          {isPreview ? <CheckCircle2 size={13} /> : <Circle size={13} />}
-          {isPreview ? 'Preview' : 'Source'}
-        </button>
-
-        <div style={{ width: 1, height: 16, background: '#e8e8e8', margin: '0 4px' }} />
-
-        {/* Search */}
-        <button
-          onClick={() => setIsSearchOpen(!isSearchOpen)}
-          title="Search (Ctrl+F)"
-          style={{ color: isSearchOpen ? '#1a1a1a' : '#aaa' }}
-        >
-          <Search size={16} />
-        </button>
+      <div style={{ padding: '0 48px' }}>
+        <input
+          type="text"
+          value={note.title}
+          onChange={e => onTitleChange(e.target.value)}
+          className="editor-title-h1"
+          placeholder={t('enterTitle')}
+          style={{ width: '100%', marginBottom: 16 }}
+        />
       </div>
 
       <SearchModule
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
+        onClose={onCloseSearch}
         onSearch={() => {}}
         onNext={handleNext}
         onPrev={handlePrev}
@@ -118,11 +126,11 @@ const MarkdownEditor = ({ note, onChange }) => {
         currentResultIndex={0}
       />
 
-      <div style={{ flex: 1, overflow: 'visible' }}>
+      <div style={{ flex: 1, overflow: 'visible', position: 'relative' }}>
         {isPreview ? (
           <div
             className="prose markdown-preview"
-            style={{ maxWidth: 'none', fontSize: 'inherit', lineHeight: 1.6 }}
+            style={{ maxWidth: 'none', fontSize: 'inherit', lineHeight: 1.6, paddingTop: 8 }}
           >
             <ReactMarkdown 
               remarkPlugins={[remarkGfm]} 
@@ -157,11 +165,13 @@ const MarkdownEditor = ({ note, onChange }) => {
             height="100%"
             theme={githubLight}
             extensions={extensions}
-            onChange={(value, viewUpdate) => { onChange(value); editorViewRef.current = viewUpdate.view; }}
-            onCreateEditor={(view) => { editorViewRef.current = view; }}
+            style={{ height: '100%' }}
+            onChange={(value, viewUpdate) => { onChange(value); editorViewRef.current = viewUpdate.view; emitActions(viewUpdate.view); }}
+            onCreateEditor={(view) => { editorViewRef.current = view; emitActions(view); }}
             basicSetup={{
               lineNumbers: settings.showLineNumbers,
               syntaxHighlighting: settings.syntaxHighlighting,
+              search: false, // Disable CM6 internal search panel
               foldGutter: false,
               highlightActiveLine: true,
             }}

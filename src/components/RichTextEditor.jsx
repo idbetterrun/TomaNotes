@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -13,6 +13,10 @@ import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { CharacterCount } from '@tiptap/extension-character-count';
 import { Typography } from '@tiptap/extension-typography';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
 import ResizableImage from './extensions/ResizableImageExtension';
 import FileAttachment from './extensions/FileAttachment';
 import SearchHighlight from './extensions/SearchHighlight';
@@ -21,10 +25,11 @@ import LinkModal from './LinkModal';
 import {
   Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon,
   List, ListOrdered, Search, ImageIcon, FilePlus,
-  Strikethrough, Code, Quote, Type,
+  Strikethrough, Code, Quote, Type, Table2,
+  Rows3, Columns3, Trash2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
-import { useTranslation } from '../context/SettingsContext';
+import { useSettings, useTranslation } from '../context/SettingsContext';
 
 
 
@@ -72,12 +77,12 @@ function ToolbarBtn({ onClick, active, title, children, disabled }) {
       title={title}
       style={{
         padding: '5px 7px', borderRadius: 5, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-        background: active ? '#1a1a1a' : 'transparent',
-        color: active ? '#fff' : '#555',
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? 'var(--surface-strong)' : 'var(--text-muted)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'all 0.12s', opacity: disabled ? 0.4 : 1,
       }}
-      onMouseEnter={e => { if (!active && !disabled) e.currentTarget.style.background = '#f0f0f0'; }}
+      onMouseEnter={e => { if (!active && !disabled) e.currentTarget.style.background = 'var(--accent-soft)'; }}
       onMouseLeave={e => { if (!active && !disabled) e.currentTarget.style.background = 'transparent'; }}
     >
       {children}
@@ -86,11 +91,19 @@ function ToolbarBtn({ onClick, active, title, children, disabled }) {
 }
 
 function Divider() {
-  return <div style={{ width: 1, height: 18, background: '#e8e8e8', margin: '0 4px', flexShrink: 0 }} />;
+  return <div style={{ width: 1, height: 18, background: 'var(--border-color)', margin: '0 4px', flexShrink: 0 }} />;
+}
+
+function ToolbarGroup({ label, children }) {
+  return (
+    <div className="rich-toolbar-group" aria-label={label}>
+      {children}
+    </div>
+  );
 }
 
 // ── Main Toolbar ─────────────────────────────────────────────────────────────
-function EditorToolbar({ editor, onLinkClick }) {
+function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
   if (!editor) return null;
 
   const applyFontSize = (e) => {
@@ -132,152 +145,171 @@ function EditorToolbar({ editor, onLinkClick }) {
   };
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2,
-      padding: '6px 10px', background: '#fafafa',
-      border: '1px solid #f0f0f0', borderRadius: 8, marginBottom: 16,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-    }}>
-      {/* Font Size Dropdown */}
-      <select
-        onChange={applyFontSize}
-        defaultValue="16px"
-        style={{
-          height: 28, padding: '0 6px', borderRadius: 5, border: '1px solid #e8e8e8',
-          fontSize: 12, fontFamily: 'inherit', background: '#fff', color: '#444',
-          cursor: 'pointer', outline: 'none', marginRight: 4,
-        }}
-        title="Font size"
-      >
-        {FONT_SIZES.map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
-      </select>
-
-      <Divider />
-
-      {/* Text Formatting */}
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="Bold (Ctrl+B)">
-        <Bold size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="Italic (Ctrl+I)">
-        <Italic size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Underline (Ctrl+U)">
-        <UnderlineIcon size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Strikethrough">
-        <Strikethrough size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title="Inline code">
-        <Code size={15} />
-      </ToolbarBtn>
-
-      <Divider />
-
-      {/* Headings */}
-      {[1, 2, 3].map((level, i) => {
-        const sizes = [17, 15, 13]; // visually distinct for the toolbar button
-        return (
-          <ToolbarBtn
-            key={level}
-            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-            active={editor.isActive('heading', { level })}
-            title={`Heading ${level}`}
+    <div className="rich-toolbar-shell">
+      <div className="rich-toolbar">
+        <ToolbarGroup label="Text style">
+          <select
+            onChange={applyFontSize}
+            defaultValue="16px"
+            className="rich-toolbar-select"
+            title="Font size"
           >
-            <span style={{ fontSize: sizes[i], fontWeight: 800, lineHeight: 1 }}>H{level}</span>
+            {FONT_SIZES.map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
+          </select>
+          <Divider />
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="Bold (Ctrl+B)">
+            <Bold size={15} />
           </ToolbarBtn>
-        );
-      })}
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="Italic (Ctrl+I)">
+            <Italic size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Underline (Ctrl+U)">
+            <UnderlineIcon size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Strikethrough">
+            <Strikethrough size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title="Inline code">
+            <Code size={15} />
+          </ToolbarBtn>
+        </ToolbarGroup>
 
-      <Divider />
+        <ToolbarGroup label="Structure">
+          {[1, 2, 3].map((level, i) => {
+            const sizes = [17, 15, 13];
+            return (
+              <ToolbarBtn
+                key={level}
+                onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                active={editor.isActive('heading', { level })}
+                title={`Heading ${level}`}
+              >
+                <span style={{ fontSize: sizes[i], fontWeight: 800, lineHeight: 1 }}>H{level}</span>
+              </ToolbarBtn>
+            );
+          })}
+          <Divider />
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="Bullet list">
+            <List size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title="Numbered list">
+            <ListOrdered size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Blockquote">
+            <Quote size={15} />
+          </ToolbarBtn>
+        </ToolbarGroup>
 
-      {/* Lists */}
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="Bullet list">
-        <List size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title="Numbered list">
-        <ListOrdered size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Blockquote">
-        <Quote size={15} />
-      </ToolbarBtn>
+        <ToolbarGroup label="Layout">
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} title="Align left">
+            <AlignLeft size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('center').run()} active={editor.isActive({ textAlign: 'center' })} title="Align center">
+            <AlignCenter size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} title="Align right">
+            <AlignRight size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('justify').run()} active={editor.isActive({ textAlign: 'justify' })} title="Justify">
+            <AlignJustify size={15} />
+          </ToolbarBtn>
+        </ToolbarGroup>
 
-      <Divider />
-
-      {/* Text Alignment */}
-      <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} title="Align left">
-        <AlignLeft size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('center').run()} active={editor.isActive({ textAlign: 'center' })} title="Align center">
-        <AlignCenter size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} title="Align right">
-        <AlignRight size={15} />
-      </ToolbarBtn>
-      <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('justify').run()} active={editor.isActive({ textAlign: 'justify' })} title="Justify">
-        <AlignJustify size={15} />
-      </ToolbarBtn>
-
-      <Divider />
-
-      {/* Font Color Picker */}
-      <label title="Font color" style={{
-        padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex', position: 'relative',
-        alignItems: 'center', color: '#555', transition: 'background 0.12s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.background = '#f0f0f0'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-      >
-        <Type size={15} style={{ color: editor.getAttributes('textStyle').color || '#000' }} />
-        <input
-          type="color"
-          onInput={e => {
-            const c = e.target.value;
-            if (c === '#000000' || c === '') editor.chain().focus().unsetColor().run();
-            else editor.chain().focus().setColor(c).run();
+        <ToolbarGroup label="Insert">
+          <label title="Font color" style={{
+            padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex', position: 'relative',
+            alignItems: 'center', color: 'var(--text-muted)', transition: 'background 0.12s',
           }}
-          value={editor.getAttributes('textStyle').color || '#000000'}
-          style={{ position: 'absolute', opacity: 0, inset: 0, width: '100%', height: '100%', cursor: 'pointer' }}
-        />
-      </label>
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-soft)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <Type size={15} style={{ color: editor.getAttributes('textStyle').color || 'var(--text-main)' }} />
+            <input
+              type="color"
+              onInput={e => {
+                const c = e.target.value;
+                if (c === '#000000' || c === '') editor.chain().focus().unsetColor().run();
+                else editor.chain().focus().setColor(c).run();
+              }}
+              value={editor.getAttributes('textStyle').color || '#000000'}
+              style={{ position: 'absolute', opacity: 0, inset: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+            />
+          </label>
+          <ToolbarBtn
+            onClick={onLinkClick}
+            active={editor.isActive('link')}
+            title="Insert link"
+          >
+            <LinkIcon size={15} />
+          </ToolbarBtn>
+          <label title="Upload image" style={{
+            padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', color: 'var(--text-muted)', transition: 'background 0.12s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-soft)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <ImageIcon size={15} />
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          </label>
+          <label title="Attach file" style={{
+            padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', color: 'var(--text-muted)', transition: 'background 0.12s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-soft)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <FilePlus size={15} />
+            <input type="file" className="hidden" onChange={handleFileAttach} />
+          </label>
+        </ToolbarGroup>
 
-      {/* Link — opens floating input instead of window.prompt */}
-      <ToolbarBtn
-        onClick={onLinkClick}
-        active={editor.isActive('link')}
-        title="Insert link"
-      >
-        <LinkIcon size={15} />
-      </ToolbarBtn>
+        <ToolbarGroup label="Tables">
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            active={editor.isActive('table')}
+            title="Insert table"
+          >
+            <Table2 size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().addRowAfter().run()}
+            disabled={!editor.can().addRowAfter()}
+            title="Add row"
+          >
+            <Rows3 size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().addColumnAfter().run()}
+            disabled={!editor.can().addColumnAfter()}
+            title="Add column"
+          >
+            <Columns3 size={15} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            disabled={!editor.can().deleteTable()}
+            title="Delete table"
+          >
+            <Trash2 size={15} />
+          </ToolbarBtn>
+        </ToolbarGroup>
 
-      {/* Image upload */}
-      <label title="Upload image" style={{
-        padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex',
-        alignItems: 'center', color: '#555', transition: 'background 0.12s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.background = '#f0f0f0'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-      >
-        <ImageIcon size={15} />
-        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-      </label>
+        <div className="rich-toolbar-spacer" />
 
-      {/* File attach */}
-      <label title="Attach file" style={{
-        padding: '5px 7px', borderRadius: 5, cursor: 'pointer', display: 'flex',
-        alignItems: 'center', color: '#555', transition: 'background 0.12s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.background = '#f0f0f0'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-      >
-        <FilePlus size={15} />
-        <input type="file" className="hidden" onChange={handleFileAttach} />
-      </label>
+        <ToolbarGroup label="Actions">
+          <ToolbarBtn onClick={onSearchToggle} active={isSearchOpen} title="Search in note (Ctrl+F)">
+            <Search size={15} />
+          </ToolbarBtn>
+        </ToolbarGroup>
+      </div>
     </div>
   );
 }
 
 // ── Rich Text Editor ─────────────────────────────────────────────────────────
-const RichTextEditor = ({ note, onChange }) => {
+const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
+  const { settings } = useSettings();
   const { t } = useTranslation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -302,6 +334,10 @@ const RichTextEditor = ({ note, onChange }) => {
       SearchHighlight,
       TaskList,
       TaskItem.configure({ nested: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Placeholder.configure({ placeholder: t('editorPlaceholder') || 'Start writing something amazing...' }),
       CharacterCount,
     ],
@@ -311,11 +347,26 @@ const RichTextEditor = ({ note, onChange }) => {
     onTransaction: () => setUpdateTick(t => t + 1),
     editorProps: {
       attributes: {
-        class: 'prose focus:outline-none max-w-none text-slate-800 leading-relaxed caret-indigo-600 min-h-[400px]',
-        style: 'font-family: inherit;',
+        class: 'prose focus:outline-none max-w-none leading-relaxed caret-indigo-600 min-h-[400px]',
+        style: `font-family: inherit; color: var(--text-main); font-size: ${settings.fontSize}px;`,
       },
     },
   });
+
+  useEffect(() => {
+    if (!onActionsChange) return;
+    if (!editor) {
+      onActionsChange({ canUndo: false, canRedo: false, undo: null, redo: null });
+      return;
+    }
+
+    onActionsChange({
+      canUndo: editor.can().undo(),
+      canRedo: editor.can().redo(),
+      undo: () => editor.chain().focus().undo().run(),
+      redo: () => editor.chain().focus().redo().run(),
+    });
+  }, [editor, onActionsChange, updateTick]);
 
   // ── Link Modal handlers ───────────────────────────────────────────────────
   const handleLinkClick = useCallback(() => {
@@ -363,7 +414,7 @@ const RichTextEditor = ({ note, onChange }) => {
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="rich-editor-shell">
       {/* Link floating input */}
       <LinkModal
         isOpen={isLinkModalOpen}
@@ -372,57 +423,68 @@ const RichTextEditor = ({ note, onChange }) => {
         initialUrl={editor?.getAttributes('link')?.href || ''}
       />
 
-      <EditorToolbar editor={editor} onLinkClick={handleLinkClick} tick={updateTick} />
+      <div className="rich-editor-sticky">
+        <EditorToolbar
+          editor={editor}
+          onLinkClick={handleLinkClick}
+          onSearchToggle={() => setIsSearchOpen(o => !o)}
+          isSearchOpen={isSearchOpen}
+          tick={updateTick}
+        />
 
-      {editor && (
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 2,
-            background: '#1a1a1a', borderRadius: 8, padding: '4px 6px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-          }}>
-            {[
-              { icon: <Bold size={13}/>, cmd: () => editor.chain().focus().toggleBold().run(), mark: 'bold' },
-              { icon: <Italic size={13}/>, cmd: () => editor.chain().focus().toggleItalic().run(), mark: 'italic' },
-              { icon: <UnderlineIcon size={13}/>, cmd: () => editor.chain().focus().toggleUnderline().run(), mark: 'underline' },
-            ].map(({ icon, cmd, mark }, i) => (
-              <button key={i} onClick={cmd} style={{
-                padding: '4px 6px', borderRadius: 5, border: 'none', cursor: 'pointer', background: 'transparent',
-                color: editor.isActive(mark) ? '#818cf8' : '#ccc',
-              }}>{icon}</button>
-            ))}
+        <SearchModule
+          isOpen={isSearchOpen}
+          onClose={() => { setIsSearchOpen(false); editor?.view.dispatch(editor.state.tr.setMeta('searchHighlight', { searchTerm: '', currentIndex: -1 })); }}
+          onSearch={handleSearch}
+          onNext={() => navigate(1)}
+          onPrev={() => navigate(-1)}
+          totalResults={results.length}
+          currentResultIndex={currentIndex}
+        />
+      </div>
+
+      <div className="rich-editor-paper">
+        <div className="rich-editor-title-block">
+          <div className="rich-editor-kicker">
+            <span className="rich-editor-kicker-label">{t('richText')}</span>
+            <span className="rich-editor-kicker-dot" />
+            <span>{editor?.storage?.characterCount?.words() || 0} words</span>
+            <span className="rich-editor-kicker-dot" />
+            <span>{editor?.storage?.characterCount?.characters() || 0} chars</span>
           </div>
-        </BubbleMenu>
-      )}
+          <input
+            type="text"
+            value={note.title}
+            onChange={e => onTitleChange(e.target.value)}
+            className="editor-title-h1"
+            placeholder={t('enterTitle')}
+            style={{ width: '100%', marginBottom: 0 }}
+          />
+        </div>
 
-      <SearchModule
-        isOpen={isSearchOpen}
-        onClose={() => { setIsSearchOpen(false); editor?.view.dispatch(editor.state.tr.setMeta('searchHighlight', { searchTerm: '', currentIndex: -1 })); }}
-        onSearch={handleSearch}
-        onNext={() => navigate(1)}
-        onPrev={() => navigate(-1)}
-        totalResults={results.length}
-        currentResultIndex={currentIndex}
-      />
+        {editor && (
+          <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 2,
+              background: '#1a1a1a', borderRadius: 8, padding: '4px 6px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            }}>
+              {[
+                { icon: <Bold size={13}/>, cmd: () => editor.chain().focus().toggleBold().run(), mark: 'bold' },
+                { icon: <Italic size={13}/>, cmd: () => editor.chain().focus().toggleItalic().run(), mark: 'italic' },
+                { icon: <UnderlineIcon size={13}/>, cmd: () => editor.chain().focus().toggleUnderline().run(), mark: 'underline' },
+              ].map(({ icon, cmd, mark }, i) => (
+                <button key={i} onClick={cmd} style={{
+                  padding: '4px 6px', borderRadius: 5, border: 'none', cursor: 'pointer', background: 'transparent',
+                  color: editor.isActive(mark) ? '#818cf8' : '#ccc',
+                }}>{icon}</button>
+              ))}
+            </div>
+          </BubbleMenu>
+        )}
 
-      <EditorContent editor={editor} />
-
-      {/* FAB for search */}
-      <button
-        onClick={() => setIsSearchOpen(o => !o)}
-        title="Search in note (Ctrl+F)"
-        style={{
-          position: 'fixed', bottom: 32, right: 32, zIndex: 60,
-          width: 44, height: 44, borderRadius: '50%', border: 'none',
-          background: '#1a1a1a', color: '#fff', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.2)', transition: 'transform 0.15s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-      >
-        <Search size={18} />
-      </button>
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 };

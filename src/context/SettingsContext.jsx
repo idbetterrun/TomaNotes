@@ -14,7 +14,40 @@ export const dictionary = {
     showLineNumbers: 'Show Line Numbers',
     syntaxHighlighting: 'Syntax Highlighting',
     fontSize: 'Font Size',
+    fontStandard: 'Size Standard',
+    fontStandardPx: 'Pixels',
+    fontStandardCn: 'Chinese Sizes',
     aboutSection: 'About',
+    appearanceSection: 'Appearance',
+    followSystem: 'Follow System',
+    noteDetails: 'Note Details',
+    titleLabel: 'Title',
+    typeLabel: 'Type',
+    modifiedAt: 'Last Modified',
+    createdTime: 'Created',
+    tagsLabel: 'Tags',
+    wordsLabel: 'Words',
+    charactersLabel: 'Characters',
+    recentLabel: 'Recent',
+    searchScope: 'Search Scope',
+    searchByTag: 'Search by Tag',
+    searchRichText: 'Search rich text',
+    searchMarkdown: 'Search markdown',
+    allTags: 'All Tags',
+    noTagsYet: 'No tags yet',
+    noEncryptedNotes: 'No encrypted notes',
+    back: 'Back',
+    uiFont: 'App Font',
+    fontSystem: 'System',
+    fontKai: 'Kai',
+    fontSong: 'Song',
+    detachWindow: 'Detach',
+    restoreWindow: 'Restore',
+    themeWhite: 'White',
+    themeGray: 'Gray',
+    themeSepia: 'Sepia',
+    themeDim: 'Dim',
+    themeBlack: 'Black',
     developer: 'Developer: douyin@idbetterrun',
     credits: 'Credits: Special thanks to Google Gemini, Claude, and ChatGPT.',
     creditsTitle: 'Credits',
@@ -108,7 +141,40 @@ export const dictionary = {
     showLineNumbers: '显示行号',
     syntaxHighlighting: '语法高亮',
     fontSize: '字体大小',
+    fontStandard: '字号标准',
+    fontStandardPx: '像素',
+    fontStandardCn: '号字',
     aboutSection: '关于',
+    appearanceSection: '外观',
+    followSystem: '跟随系统切换深色模式',
+    noteDetails: '详细信息',
+    titleLabel: '标题',
+    typeLabel: '类型',
+    modifiedAt: '上次修改',
+    createdTime: '创建时间',
+    tagsLabel: '标签',
+    wordsLabel: '字数',
+    charactersLabel: '字符数',
+    recentLabel: '最近使用',
+    searchScope: '搜索范围',
+    searchByTag: '根据标签搜索',
+    searchRichText: '在富文本中搜索',
+    searchMarkdown: '在 Markdown 中搜索',
+    allTags: '所有标签',
+    noTagsYet: '暂无标签',
+    noEncryptedNotes: '暂无加密笔记',
+    back: '返回',
+    uiFont: '界面字体',
+    fontSystem: '系统',
+    fontKai: '楷体',
+    fontSong: '宋体',
+    detachWindow: '独立',
+    restoreWindow: '恢复',
+    themeWhite: '白',
+    themeGray: '灰',
+    themeSepia: '类纸黄',
+    themeDim: '灰黑',
+    themeBlack: '黑',
     developer: '开发者: douyin@idbetterrun',
     credits: '鸣谢: 特别感谢 Google Gemini, Claude, 和 ChatGPT.',
     creditsTitle: '鸣谢',
@@ -202,7 +268,40 @@ export const dictionary = {
     showLineNumbers: '顯示行號',
     syntaxHighlighting: '語法高亮',
     fontSize: '字體大小',
+    fontStandard: '字號標準',
+    fontStandardPx: '像素',
+    fontStandardCn: '號字',
     aboutSection: '關於',
+    appearanceSection: '外觀',
+    followSystem: '跟隨系統切換深色模式',
+    noteDetails: '詳細資訊',
+    titleLabel: '標題',
+    typeLabel: '類型',
+    modifiedAt: '上次修改',
+    createdTime: '建立時間',
+    tagsLabel: '標籤',
+    wordsLabel: '字詞數',
+    charactersLabel: '字元數',
+    recentLabel: '最近使用',
+    searchScope: '搜尋範圍',
+    searchByTag: '依標籤搜尋',
+    searchRichText: '在富文本中搜尋',
+    searchMarkdown: '在 Markdown 中搜尋',
+    allTags: '所有標籤',
+    noTagsYet: '尚無標籤',
+    noEncryptedNotes: '尚無加密筆記',
+    back: '返回',
+    uiFont: '介面字體',
+    fontSystem: '系統',
+    fontKai: '楷體',
+    fontSong: '宋體',
+    detachWindow: '獨立',
+    restoreWindow: '恢復',
+    themeWhite: '白',
+    themeGray: '灰',
+    themeSepia: '類紙黃',
+    themeDim: '灰黑',
+    themeBlack: '黑',
     developer: '開發者: douyin@idbetterrun',
     credits: '鳴謝: 特別感謝 Google Gemini, Claude, 和 ChatGPT.',
     creditsTitle: '鳴謝',
@@ -288,25 +387,98 @@ export const dictionary = {
 
 const SettingsContext = createContext();
 
+const LIGHT_THEMES = ['white', 'gray', 'sepia'];
+const DARK_THEMES = ['dim', 'black'];
+
+function getSystemAppearance() {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getAllowedThemes(appearance) {
+  return appearance === 'dark' ? DARK_THEMES : LIGHT_THEMES;
+}
+
+function getDefaultTheme(appearance) {
+  return appearance === 'dark' ? 'dim' : 'white';
+}
+
+function normalizeTheme(theme, appearance) {
+  const allowed = getAllowedThemes(appearance);
+  return allowed.includes(theme) ? theme : getDefaultTheme(appearance);
+}
+
+function getAppFontFamily(language, fontFamily) {
+  if (!String(language || '').startsWith('zh')) {
+    return 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  }
+
+  if (fontFamily === 'kai') {
+    return '"Kaiti SC", "STKaiti", "KaiTi", "BiauKai", serif';
+  }
+
+  if (fontFamily === 'song') {
+    return '"Songti SC", "STSong", "SimSun", serif';
+  }
+
+  return 'system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+}
+
 export function SettingsProvider({ children }) {
+  const [systemAppearance, setSystemAppearance] = useState(getSystemAppearance);
   const [settings, setSettings] = useState(() => {
     const savedSettings = localStorage.getItem('editor-settings');
     const defaults = { 
-      showLineNumbers: true, syntaxHighlighting: true, fontSize: 15, language: 'en',
-      globalPinEnabled: false, touchIdEnabled: false, autoLockTime: 2, masterKeyEnabled: false
+      showLineNumbers: true, syntaxHighlighting: true, fontSize: 16, language: 'en',
+      globalPinEnabled: false, touchIdEnabled: false, autoLockTime: 2, masterKeyEnabled: false,
+      theme: 'white', followSystem: true, fontSizeStandard: 'px', fontFamily: 'system'
     };
     if (!savedSettings) return defaults;
     const parsed = JSON.parse(savedSettings);
     // Migrate: "0" (Immediately) was removed — bump to 2 minutes
     if (parsed.autoLockTime === 0) parsed.autoLockTime = 2;
-    return { ...defaults, ...parsed };
+    return { ...defaults, ...parsed, theme: normalizeTheme(parsed.theme || defaults.theme, getSystemAppearance()) };
   });
 
   useEffect(() => {
     localStorage.setItem('editor-settings', JSON.stringify(settings));
     document.documentElement.style.setProperty('--note-font-size', `${settings.fontSize}px`);
     document.documentElement.style.setProperty('--editor-font-size', `${settings.fontSize}px`);
-  }, [settings]);
+    document.documentElement.style.setProperty('--app-font-family', getAppFontFamily(settings.language, settings.fontFamily));
+    
+    // Theme application
+    const activeTheme = settings.followSystem
+      ? getDefaultTheme(systemAppearance)
+      : normalizeTheme(settings.theme, systemAppearance);
+
+    document.documentElement.setAttribute('data-theme', activeTheme || 'white');
+
+    if (window.electron?.system?.setLanguage) {
+      window.electron.system.setLanguage(settings.language || 'en');
+    }
+  }, [settings, systemAppearance]);
+
+  useEffect(() => {
+    if (settings.followSystem) return;
+    const normalizedTheme = normalizeTheme(settings.theme, systemAppearance);
+    if (normalizedTheme !== settings.theme) {
+      setSettings(prev => ({ ...prev, theme: normalizedTheme }));
+    }
+  }, [settings.followSystem, settings.theme, systemAppearance]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => {
+      const nextAppearance = e.matches ? 'dark' : 'light';
+      setSystemAppearance(nextAppearance);
+      if (!settings.followSystem) {
+        setSettings(prev => ({ ...prev, theme: normalizeTheme(prev.theme, nextAppearance) }));
+      }
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [settings.followSystem]);
 
   const toggleLineNumbers = () => {
     setSettings(prev => ({ ...prev, showLineNumbers: !prev.showLineNumbers }));
@@ -328,13 +500,20 @@ export function SettingsProvider({ children }) {
     setSettings(prev => ({ ...prev, ...updates }));
   };
 
+  const setTheme = (theme) => {
+    setSettings(prev => ({ ...prev, theme: normalizeTheme(theme, systemAppearance) }));
+  };
+
   const value = { 
     settings, 
+    systemAppearance,
+    availableThemes: getAllowedThemes(systemAppearance),
     toggleLineNumbers, 
     toggleSyntaxHighlighting, 
     updateFontSize,
     setLanguage,
-    updateSecuritySettings
+    updateSecuritySettings,
+    setTheme,
   };
 
   return (
