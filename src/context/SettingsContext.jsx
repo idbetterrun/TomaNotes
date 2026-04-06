@@ -54,7 +54,7 @@ export const dictionary = {
     profileLabel: 'Profile',
     syncDescription: 'Sync your notes everywhere',
     createdAt: 'Created at',
-    version: 'Version: 0.1 Beta 1',
+    version: 'Version: 0.1.1',
     allNotes: 'All Notes',
     favorites: 'Favorites',
     trash: 'Trash',
@@ -111,6 +111,10 @@ export const dictionary = {
     changePin: 'Change PIN',
     touchId: 'Touch ID / Biometrics',
     touchIdDesc: 'Use fingerprint to quick unlock',
+    trashAuth: 'Trash verification',
+    trashAuthDesc: 'Require authentication before opening the trash',
+    hideProtectedSearch: 'Hide protected notes from search',
+    hideProtectedSearchDesc: 'Protected notes will be excluded from sidebar search results',
     autoLockTime: 'Auto-Lock Time',
     lockImmediate: 'Immediately',
     lockNever: 'Never',
@@ -181,7 +185,7 @@ export const dictionary = {
     profileLabel: '个人资料',
     syncDescription: '在所有设备上同步您的笔记',
     createdAt: '创建时间',
-    version: '版本: 0.1 Beta 1',
+    version: '版本: 0.1.1',
     allNotes: '所有笔记',
     favorites: '收藏夹',
     trash: '回收站',
@@ -238,6 +242,10 @@ export const dictionary = {
     changePin: '修改密码',
     touchId: 'Touch ID 快速验证',
     touchIdDesc: '允许使用触控 ID 快速解锁',
+    trashAuth: '回收站验证',
+    trashAuthDesc: '进入回收站前需要先验证身份',
+    hideProtectedSearch: '受保护笔记不可搜索',
+    hideProtectedSearchDesc: '侧边栏搜索结果中将隐藏受保护笔记',
     autoLockTime: '自动锁定时间',
     lockImmediate: '立即',
     lockNever: '永不',
@@ -308,7 +316,7 @@ export const dictionary = {
     profileLabel: '個人資料',
     syncDescription: '在所有設備上同步您的筆記',
     createdAt: '創建時間',
-    version: '版本: 0.1 Beta 1',
+    version: '版本: 0.1.1',
     allNotes: '所有筆記',
     favorites: '收藏夾',
     trash: '回收站',
@@ -365,6 +373,10 @@ export const dictionary = {
     changePin: '修改密碼',
     touchId: 'Touch ID 快速驗證',
     touchIdDesc: '允許使用觸控 ID 快速解鎖',
+    trashAuth: '回收站驗證',
+    trashAuthDesc: '進入回收站前需要先驗證身分',
+    hideProtectedSearch: '受保護筆記不可搜尋',
+    hideProtectedSearchDesc: '側邊欄搜尋結果中將隱藏受保護筆記',
     autoLockTime: '自動鎖定時間',
     lockImmediate: '立即',
     lockNever: '永不',
@@ -389,6 +401,7 @@ const SettingsContext = createContext();
 
 const LIGHT_THEMES = ['white', 'gray', 'sepia'];
 const DARK_THEMES = ['dim', 'black'];
+const ALL_THEMES = [...LIGHT_THEMES, ...DARK_THEMES];
 
 function getSystemAppearance() {
   if (typeof window === 'undefined' || !window.matchMedia) return 'light';
@@ -406,6 +419,10 @@ function getDefaultTheme(appearance) {
 function normalizeTheme(theme, appearance) {
   const allowed = getAllowedThemes(appearance);
   return allowed.includes(theme) ? theme : getDefaultTheme(appearance);
+}
+
+function isDarkTheme(theme) {
+  return DARK_THEMES.includes(theme);
 }
 
 function getAppFontFamily(language, fontFamily) {
@@ -430,14 +447,29 @@ export function SettingsProvider({ children }) {
     const savedSettings = localStorage.getItem('editor-settings');
     const defaults = { 
       showLineNumbers: true, syntaxHighlighting: true, fontSize: 16, language: 'en',
-      globalPinEnabled: false, touchIdEnabled: false, autoLockTime: 2, masterKeyEnabled: false,
-      theme: 'white', followSystem: true, fontSizeStandard: 'px', fontFamily: 'system'
+      globalPinEnabled: false, touchIdEnabled: false, trashAuthEnabled: true, hideProtectedSearch: true, autoLockTime: 2,
+      theme: 'white', lightTheme: 'white', darkTheme: 'dim', followSystem: true, fontSizeStandard: 'px', fontFamily: 'system'
     };
     if (!savedSettings) return defaults;
     const parsed = JSON.parse(savedSettings);
     // Migrate: "0" (Immediately) was removed — bump to 2 minutes
     if (parsed.autoLockTime === 0) parsed.autoLockTime = 2;
-    return { ...defaults, ...parsed, theme: normalizeTheme(parsed.theme || defaults.theme, getSystemAppearance()) };
+    delete parsed.masterKeyEnabled;
+    const systemAppearance = getSystemAppearance();
+    const fallbackTheme = defaults.theme;
+    const parsedTheme = ALL_THEMES.includes(parsed.theme) ? parsed.theme : fallbackTheme;
+    const next = { ...defaults, ...parsed, theme: parsedTheme };
+    if (!ALL_THEMES.includes(next.lightTheme)) {
+      next.lightTheme = isDarkTheme(parsedTheme) ? defaults.lightTheme : parsedTheme;
+    }
+    if (!ALL_THEMES.includes(next.darkTheme)) {
+      next.darkTheme = isDarkTheme(parsedTheme) ? parsedTheme : defaults.darkTheme;
+    }
+    // When follow system is on, keep the selected tone per appearance.
+    if (next.followSystem) {
+      next.theme = systemAppearance === 'dark' ? next.darkTheme : next.lightTheme;
+    }
+    return next;
   });
 
   useEffect(() => {
@@ -448,8 +480,8 @@ export function SettingsProvider({ children }) {
     
     // Theme application
     const activeTheme = settings.followSystem
-      ? getDefaultTheme(systemAppearance)
-      : normalizeTheme(settings.theme, systemAppearance);
+      ? (systemAppearance === 'dark' ? settings.darkTheme : settings.lightTheme)
+      : settings.theme;
 
     document.documentElement.setAttribute('data-theme', activeTheme || 'white');
 
@@ -459,21 +491,10 @@ export function SettingsProvider({ children }) {
   }, [settings, systemAppearance]);
 
   useEffect(() => {
-    if (settings.followSystem) return;
-    const normalizedTheme = normalizeTheme(settings.theme, systemAppearance);
-    if (normalizedTheme !== settings.theme) {
-      setSettings(prev => ({ ...prev, theme: normalizedTheme }));
-    }
-  }, [settings.followSystem, settings.theme, systemAppearance]);
-
-  useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
       const nextAppearance = e.matches ? 'dark' : 'light';
       setSystemAppearance(nextAppearance);
-      if (!settings.followSystem) {
-        setSettings(prev => ({ ...prev, theme: normalizeTheme(prev.theme, nextAppearance) }));
-      }
     };
     
     mediaQuery.addEventListener('change', handleChange);
@@ -501,13 +522,24 @@ export function SettingsProvider({ children }) {
   };
 
   const setTheme = (theme) => {
-    setSettings(prev => ({ ...prev, theme: normalizeTheme(theme, systemAppearance) }));
+    setSettings(prev => {
+      if (!ALL_THEMES.includes(theme)) return prev;
+      if (prev.followSystem) {
+        if (isDarkTheme(theme)) {
+          return { ...prev, darkTheme: theme };
+        }
+        return { ...prev, lightTheme: theme };
+      }
+      return { ...prev, theme };
+    });
   };
 
   const value = { 
     settings, 
     systemAppearance,
-    availableThemes: getAllowedThemes(systemAppearance),
+    availableThemes: ALL_THEMES,
+    lightThemes: LIGHT_THEMES,
+    darkThemes: DARK_THEMES,
     toggleLineNumbers, 
     toggleSyntaxHighlighting, 
     updateFontSize,

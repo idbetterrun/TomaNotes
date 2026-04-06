@@ -478,17 +478,24 @@ button:active {
   text-transform: capitalize;
 }
 
-/* Refined search input: borderless until focused */
+/* Sidebar search row */
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .search-input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
-.search-input-wrapper svg {
+.search-input-icon {
   position: absolute;
   left: 10px;
-  color: #aaa;
+  color: var(--text-subtle);
   pointer-events: none;
 }
 
@@ -497,7 +504,7 @@ button:active {
   background: var(--surface-strong);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 8px 12px 8px 34px;
+  padding: 8px 64px 8px 34px;
   font-size: 13px;
   font-family: inherit;
   color: var(--text-main);
@@ -512,6 +519,52 @@ button:active {
 .search-input:focus {
   border-color: var(--border-strong);
   background: var(--surface-strong);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.search-clear-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text-main);
+}
+
+.search-exit-btn {
+  flex-shrink: 0;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.search-exit-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text-main);
+  border-color: var(--border-strong);
 }
 
 .note-card-list {

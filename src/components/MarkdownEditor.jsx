@@ -2,14 +2,14 @@ import React, { useCallback, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { githubLight } from '@uiw/codemirror-theme-github';
 import { useSettings, useTranslation } from '../context/SettingsContext';
 import SearchModule from './SearchModule';
 import { ViewPlugin, Decoration, EditorView, scrollPastEnd } from '@codemirror/view';
 import { findNext, findPrevious } from '@codemirror/search';
 import { RangeSetBuilder } from '@codemirror/state';
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
+import { tags } from '@lezer/highlight';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
@@ -28,6 +28,18 @@ SyntaxHighlighter.registerLanguage('css', css);
 SyntaxHighlighter.registerLanguage('bash', bash);
 SyntaxHighlighter.registerLanguage('python', python);
 SyntaxHighlighter.registerLanguage('rust', rust);
+
+// 关键修改点：HighlightStyle 只使用当前项目里已验证存在的标准 tags，
+// 避免把 undefined tag 传给 HighlightStyle.define 导致运行时白屏。
+const markdownHighlightStyle = HighlightStyle.define([
+  { tag: [tags.content, tags.name, tags.string, tags.keyword, tags.special(tags.string)], color: 'var(--text-main)' },
+  { tag: [tags.heading, tags.strong], color: 'var(--text-main)', fontWeight: '700' },
+  { tag: [tags.emphasis], color: 'var(--text-main)', fontStyle: 'italic' },
+  { tag: [tags.link, tags.url], color: 'var(--accent)', textDecoration: 'underline' },
+  { tag: [tags.monospace], color: 'var(--text-main)' },
+  { tag: [tags.quote, tags.comment], color: 'var(--text-muted)' },
+  { tag: [tags.list, tags.separator], color: 'var(--text-subtle)' },
+]);
 
 // Cleaner Image Decorator for CM6 Markdown
 const imagePlugin = ViewPlugin.fromClass(class {
@@ -82,21 +94,29 @@ const MarkdownEditor = ({ note, onChange, onTitleChange, isPreview, isSearchOpen
     imagePlugin,
     EditorView.lineWrapping,
     scrollPastEnd(),
+    syntaxHighlighting(markdownHighlightStyle),
     EditorView.theme({
       '&': { height: '100%', minHeight: '400px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)' },
+      '.cm-editor': { backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)' },
       '.cm-scroller': { 
         overflow: 'auto', 
         outline: 'none',
         paddingBottom: '20vh', 
+        color: 'var(--text-main)',
       },
       '.cm-content': { 
         paddingTop: '32px',
-        minHeight: '100% '
+        minHeight: '100% ',
+        color: 'var(--text-main)',
       },
+      '.cm-gutters': { backgroundColor: 'var(--bg-primary)', color: 'var(--text-subtle)', borderRight: '1px solid var(--border-color)' },
+      '.cm-activeLineGutter': { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' },
       '.cm-cursor': { borderLeftColor: 'var(--text-main)' },
       '.cm-selectionBackground, .cm-content ::selection': { backgroundColor: 'var(--accent)', opacity: 0.2 },
       '.cm-activeLine': { backgroundColor: 'var(--bg-secondary)', opacity: 0.5 },
-      '.cm-line': { padding: '0 4px', color: 'var(--text-main)' }
+      '.cm-line': { padding: '0 4px', color: 'var(--text-main)' },
+      '.cm-placeholder': { color: 'var(--text-subtle)' },
+      '.cm-panels': { backgroundColor: 'var(--surface-strong)', color: 'var(--text-main)', borderColor: 'var(--border-color)' },
     })
   ];
 
@@ -163,7 +183,6 @@ const MarkdownEditor = ({ note, onChange, onTitleChange, isPreview, isSearchOpen
           <CodeMirror
             value={note.content}
             height="100%"
-            theme={githubLight}
             extensions={extensions}
             style={{ height: '100%' }}
             onChange={(value, viewUpdate) => { onChange(value); editorViewRef.current = viewUpdate.view; emitActions(viewUpdate.view); }}

@@ -52,6 +52,51 @@ const FontSize = Mark.create({
 });
 
 const FONT_SIZES = ['12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px'];
+const DEFAULT_TOOLBAR_STATE = {
+  fontSize: '16px',
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  code: false,
+  link: false,
+  bulletList: false,
+  orderedList: false,
+  blockquote: false,
+  heading1: false,
+  heading2: false,
+  heading3: false,
+  alignLeft: false,
+  alignCenter: false,
+  alignRight: false,
+  alignJustify: false,
+  table: false,
+};
+
+function getToolbarState(editor) {
+  if (!editor) return DEFAULT_TOOLBAR_STATE;
+
+  return {
+    fontSize: editor.getAttributes('fontSize').size || '16px',
+    bold: editor.isActive('bold'),
+    italic: editor.isActive('italic'),
+    underline: editor.isActive('underline'),
+    strike: editor.isActive('strike'),
+    code: editor.isActive('code'),
+    link: editor.isActive('link'),
+    bulletList: editor.isActive('bulletList'),
+    orderedList: editor.isActive('orderedList'),
+    blockquote: editor.isActive('blockquote'),
+    heading1: editor.isActive('heading', { level: 1 }),
+    heading2: editor.isActive('heading', { level: 2 }),
+    heading3: editor.isActive('heading', { level: 3 }),
+    alignLeft: editor.isActive({ textAlign: 'left' }),
+    alignCenter: editor.isActive({ textAlign: 'center' }),
+    alignRight: editor.isActive({ textAlign: 'right' }),
+    alignJustify: editor.isActive({ textAlign: 'justify' }),
+    table: editor.isActive('table'),
+  };
+}
 
 // ── toBase64 utility: converts a File to Base64 DataURL with error handling ──
 function toBase64(file) {
@@ -103,7 +148,7 @@ function ToolbarGroup({ label, children }) {
 }
 
 // ── Main Toolbar ─────────────────────────────────────────────────────────────
-function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
+function EditorToolbar({ editor, toolbarState, onLinkClick, onSearchToggle, isSearchOpen }) {
   if (!editor) return null;
 
   const applyFontSize = (e) => {
@@ -150,26 +195,26 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
         <ToolbarGroup label="Text style">
           <select
             onChange={applyFontSize}
-            defaultValue="16px"
+            value={toolbarState.fontSize}
             className="rich-toolbar-select"
             title="Font size"
           >
             {FONT_SIZES.map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
           </select>
           <Divider />
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="Bold (Ctrl+B)">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={toolbarState.bold} title="Bold (Ctrl+B)">
             <Bold size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="Italic (Ctrl+I)">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={toolbarState.italic} title="Italic (Ctrl+I)">
             <Italic size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Underline (Ctrl+U)">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={toolbarState.underline} title="Underline (Ctrl+U)">
             <UnderlineIcon size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Strikethrough">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={toolbarState.strike} title="Strikethrough">
             <Strikethrough size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title="Inline code">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleCode().run()} active={toolbarState.code} title="Inline code">
             <Code size={15} />
           </ToolbarBtn>
         </ToolbarGroup>
@@ -181,7 +226,7 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
               <ToolbarBtn
                 key={level}
                 onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-                active={editor.isActive('heading', { level })}
+                active={toolbarState[`heading${level}`]}
                 title={`Heading ${level}`}
               >
                 <span style={{ fontSize: sizes[i], fontWeight: 800, lineHeight: 1 }}>H{level}</span>
@@ -189,28 +234,28 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
             );
           })}
           <Divider />
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="Bullet list">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={toolbarState.bulletList} title="Bullet list">
             <List size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title="Numbered list">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={toolbarState.orderedList} title="Numbered list">
             <ListOrdered size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Blockquote">
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={toolbarState.blockquote} title="Blockquote">
             <Quote size={15} />
           </ToolbarBtn>
         </ToolbarGroup>
 
         <ToolbarGroup label="Layout">
-          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} title="Align left">
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={toolbarState.alignLeft} title="Align left">
             <AlignLeft size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('center').run()} active={editor.isActive({ textAlign: 'center' })} title="Align center">
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('center').run()} active={toolbarState.alignCenter} title="Align center">
             <AlignCenter size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} title="Align right">
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={toolbarState.alignRight} title="Align right">
             <AlignRight size={15} />
           </ToolbarBtn>
-          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('justify').run()} active={editor.isActive({ textAlign: 'justify' })} title="Justify">
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('justify').run()} active={toolbarState.alignJustify} title="Justify">
             <AlignJustify size={15} />
           </ToolbarBtn>
         </ToolbarGroup>
@@ -237,7 +282,7 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
           </label>
           <ToolbarBtn
             onClick={onLinkClick}
-            active={editor.isActive('link')}
+            active={toolbarState.link}
             title="Insert link"
           >
             <LinkIcon size={15} />
@@ -267,7 +312,7 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
         <ToolbarGroup label="Tables">
           <ToolbarBtn
             onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-            active={editor.isActive('table')}
+            active={toolbarState.table}
             title="Insert table"
           >
             <Table2 size={15} />
@@ -310,13 +355,14 @@ function EditorToolbar({ editor, onLinkClick, onSearchToggle, isSearchOpen }) {
 // ── Rich Text Editor ─────────────────────────────────────────────────────────
 const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
   const { settings } = useSettings();
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [results, setResults] = useState([]);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [updateTick, setUpdateTick] = useState(0);
+  const [toolbarState, setToolbarState] = useState(DEFAULT_TOOLBAR_STATE);
 
   const editor = useEditor({
     extensions: [
@@ -328,7 +374,8 @@ const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
       FontSize,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Link.configure({ openOnClick: true, autolink: true }),
+      // Keep edit mode stable; real link opening is handled by Electron main process.
+      Link.configure({ openOnClick: false, autolink: true }),
       ResizableImage,
       FileAttachment,
       SearchHighlight,
@@ -367,6 +414,36 @@ const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
       redo: () => editor.chain().focus().redo().run(),
     });
   }, [editor, onActionsChange, updateTick]);
+
+  const syncToolbarState = useCallback(() => {
+    setToolbarState(getToolbarState(editor));
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) {
+      setToolbarState(DEFAULT_TOOLBAR_STATE);
+      return undefined;
+    }
+
+    const doc = editor.view.dom.ownerDocument;
+    const handleSelectionChange = () => {
+      const selection = doc.getSelection();
+      const anchorNode = selection?.anchorNode;
+      if (!anchorNode || !editor.view.dom.contains(anchorNode)) return;
+      syncToolbarState();
+    };
+
+    syncToolbarState();
+    editor.on('selectionUpdate', syncToolbarState);
+    editor.on('transaction', syncToolbarState);
+    doc.addEventListener('selectionchange', handleSelectionChange);
+
+    return () => {
+      editor.off('selectionUpdate', syncToolbarState);
+      editor.off('transaction', syncToolbarState);
+      doc.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, [editor, syncToolbarState]);
 
   // ── Link Modal handlers ───────────────────────────────────────────────────
   const handleLinkClick = useCallback(() => {
@@ -426,6 +503,7 @@ const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
       <div className="rich-editor-sticky">
         <EditorToolbar
           editor={editor}
+          toolbarState={toolbarState}
           onLinkClick={handleLinkClick}
           onSearchToggle={() => setIsSearchOpen(o => !o)}
           isSearchOpen={isSearchOpen}
@@ -448,9 +526,11 @@ const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
           <div className="rich-editor-kicker">
             <span className="rich-editor-kicker-label">{t('richText')}</span>
             <span className="rich-editor-kicker-dot" />
-            <span>{editor?.storage?.characterCount?.words() || 0} words</span>
-            <span className="rich-editor-kicker-dot" />
-            <span>{editor?.storage?.characterCount?.characters() || 0} chars</span>
+            {lang.startsWith('zh') ? (
+              <span>{editor?.storage?.characterCount?.characters() || 0} {t('charactersLabel')}</span>
+            ) : (
+              <span>{editor?.storage?.characterCount?.words() || 0} {t('wordsLabel')}</span>
+            )}
           </div>
           <input
             type="text"
