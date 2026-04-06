@@ -12,12 +12,13 @@ import MarkdownEditor from './components/MarkdownEditor';
 import EmptyState from './components/EmptyState';
 import SettingsSidebar from './components/SettingsSidebar';
 import ExportModal from './components/ExportModal';
-import PasswordModal from './components/PasswordModal';
-import LockedNoteView from './components/LockedNoteView';
 import ConfirmModal from './components/ConfirmModal';
 import AutoLockScreen from './components/AutoLockScreen';
+import SidebarSearchPanel from './components/SidebarSearchPanel';
 import { ToastContainer, useToast } from './components/Toast';
 import { useSettings, useTranslation } from './context/SettingsContext';
+import { useSecurityManager } from './hooks/useSecurityManager';
+import { useNoteSearch } from './hooks/useNoteSearch';
 
 const FONT_SIZE_PRESETS_CN = [
   { label: '小四', px: 12 },
@@ -28,6 +29,22 @@ const FONT_SIZE_PRESETS_CN = [
   { label: '二号', px: 22 },
   { label: '小一', px: 24 },
 ];
+
+const normalizeNote = (note) => {
+  const isProtected = note?.protected ?? note?.encrypted ?? false;
+  return {
+    ...note,
+    isDeleted: note?.isDeleted ?? false,
+    isFavorite: note?.isFavorite ?? false,
+    isPinned: note?.isPinned ?? false,
+    encrypted: isProtected,
+    protected: isProtected,
+    starred: note?.starred ?? false,
+    tags: note?.tags ?? [],
+    modifiedAt: note?.modifiedAt ?? note?.createdAt,
+    lastOpenedAt: note?.lastOpenedAt ?? note?.createdAt,
+  };
+};
 
 // ─── New Note Dropdown ───────────────────────────────────────────────────────
 function NewNoteDropdown({ onCreate, variant = 'rail' }) {
@@ -93,6 +110,67 @@ function NewNoteDropdown({ onCreate, variant = 'rail' }) {
           <div style={{ height: 4 }} />
         </div>
       )}
+    </div>
+  );
+}
+
+function ProtectedNotePrompt({ title, onAuthenticate, t, lang }) {
+  return (
+    <div style={{
+      minHeight: 420,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '48px 24px',
+    }}>
+      <div style={{
+        width: 'min(100%, 420px)',
+        borderRadius: 24,
+        border: '1px solid var(--border-color)',
+        background: 'var(--surface-strong)',
+        padding: '34px 28px',
+        boxShadow: 'var(--shadow-soft)',
+        textAlign: 'center',
+      }}>
+        <div style={{
+          width: 68,
+          height: 68,
+          borderRadius: 20,
+          margin: '0 auto 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--accent-soft)',
+          color: 'var(--accent)',
+        }}>
+          <Lock size={30} />
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.03em', marginBottom: 8 }}>
+          {title || t('untitled')}
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 22 }}>
+          {lang === 'en' ? 'This protected note needs password verification before previewing.' : lang === 'zh-TW' ? '這篇受保護筆記需要先完成密碼驗證才能預覽。' : '这篇受保护笔记需要先完成密码验证才能预览。'}
+        </div>
+        <button
+          onClick={onAuthenticate}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '11px 16px',
+            borderRadius: 999,
+            border: '1px solid var(--border-color)',
+            background: 'var(--accent)',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          <Lock size={14} />
+          {lang === 'en' ? 'Verify to view' : lang === 'zh-TW' ? '驗證後查看' : '验证后查看'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -175,17 +253,7 @@ function App() {
     try {
       const parsed = JSON.parse(saved);
       const seen = new Set();
-      return parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(n => ({
-        ...n,
-        isDeleted: n.isDeleted ?? false,
-        isFavorite: n.isFavorite ?? false,
-        isPinned: n.isPinned ?? false,
-        encrypted: n.encrypted ?? false,
-        starred: n.starred ?? false,
-        tags: n.tags ?? [],
-        modifiedAt: n.modifiedAt ?? n.createdAt,
-        lastOpenedAt: n.lastOpenedAt ?? n.createdAt,
-      }));
+      return parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(normalizeNote);
     } catch (e) {
       console.error('[Notes] Failed to parse saved notes:', e);
       return [];
@@ -194,33 +262,46 @@ function App() {
 
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [activeView, setActiveView] = useState('notes');
-  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'rich' | 'markdown'
-  const [searchTerm, setSearchTerm] = useState('');
-  const [tagFilter, setTagFilter] = useState('all');
-  const [isSidebarSearchFocused, setIsSidebarSearchFocused] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [tagInput, setTagInput] = useState('');
   const [isNoteInfoOpen, setIsNoteInfoOpen] = useState(false);
   const [isMdPreview, setIsMdPreview] = useState(false);
   const [isEditorSearchOpen, setIsEditorSearchOpen] = useState(false);
+  const [protectedPreviewNoteId, setProtectedPreviewNoteId] = useState(null);
   const [editorActions, setEditorActions] = useState({ canUndo: false, canRedo: false, undo: null, redo: null });
   const [showLaunchBrand, setShowLaunchBrand] = useState(true);
   const [isBooting, setIsBooting] = useState(true);
+  const sidebarSearchRef = useRef(null);
   
   // Security
-  const [isLocked, setIsLocked] = useState(false);
-  const [globalUnlocked, setGlobalUnlocked] = useState(false);
-  const [pendingView, setPendingView] = useState(null);
-  const blurTimeRef = useRef(null);
-  
   const [contextMenu, setContextMenu] = useState(null); // { x, y, note }
   const [exportModal, setExportModal] = useState(null); // note object or null
-  const [passwordModal, setPasswordModal] = useState(null); // { note, mode: 'set' | 'unlock' }
   const [confirmModal, setConfirmModal] = useState(null); // { type: 'single' | 'empty', payload?: noteId }
-  const [unlockedNotes, setUnlockedNotes] = useState(new Set()); // session-level unlocking
 
   const { toasts, remove: removeToast, toast } = useToast();
+  const {
+    securityState,
+    requireAuth,
+    lockApp,
+    enablePassword,
+    disablePassword,
+    enableBiometric,
+    disableBiometric,
+    getBiometricPromptMessage,
+    unlockWithBiometric,
+    unlockWithPassword,
+  } = useSecurityManager({
+    enabled: settings.globalPinEnabled,
+    autoLockMinutes: settings.autoLockTime,
+    biometricEnabled: settings.touchIdEnabled,
+    onLock: () => {
+      setIsNoteInfoOpen(false);
+      setContextMenu(null);
+    },
+  });
+
+  const isSecurityEnabled = securityState.enabled && securityState.hasPassword;
 
   useEffect(() => {
     try {
@@ -236,17 +317,7 @@ function App() {
       try {
         const parsed = JSON.parse(event.newValue);
         const seen = new Set();
-        setNotes(parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(n => ({
-          ...n,
-          isDeleted: n.isDeleted ?? false,
-          isFavorite: n.isFavorite ?? false,
-          isPinned: n.isPinned ?? false,
-          encrypted: n.encrypted ?? false,
-          starred: n.starred ?? false,
-          tags: n.tags ?? [],
-          modifiedAt: n.modifiedAt ?? n.createdAt,
-          lastOpenedAt: n.lastOpenedAt ?? n.createdAt,
-        })));
+        setNotes(parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(normalizeNote));
       } catch (error) {
         console.error('[Notes] Failed to sync notes:', error);
       }
@@ -257,9 +328,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isDetachedWindow || !detachedNoteId) return;
-    setActiveNoteId(Number(detachedNoteId));
-  }, [isDetachedWindow, detachedNoteId]);
+    // Renderer-side hard fallback: always route external links to system browser.
+    const handleDocumentClick = async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest('a[href]');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (!/^https?:\/\//i.test(href)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (window.electron?.system?.openExternal) {
+        await window.electron.system.openExternal(href);
+      } else {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    };
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => document.removeEventListener('click', handleDocumentClick, true);
+  }, []);
 
   useEffect(() => {
     const brandTimer = window.setTimeout(() => setShowLaunchBrand(false), 2600);
@@ -270,43 +357,56 @@ function App() {
     };
   }, []);
 
-  const allTags = useMemo(() => {
-    const tags = new Set();
-    notes.forEach(note => (note.tags || []).forEach(tag => tags.add(tag)));
-    return [...tags].sort((a, b) => a.localeCompare(b));
-  }, [notes]);
+  const isProtectedNote = useCallback((note) => !!(note?.protected ?? note?.encrypted), []);
 
-  const recentNotes = useMemo(() => {
-    return [...notes]
-      .filter(n => !n.isDeleted)
-      .sort((a, b) => new Date(b.lastOpenedAt || b.createdAt) - new Date(a.lastOpenedAt || a.createdAt))
-      .slice(0, 5);
-  }, [notes]);
-
-  const filteredNotes = useMemo(() => {
-    let list = notes.filter(n => {
+  const browseNotes = useMemo(() => {
+    const list = notes.filter(n => {
       if (activeView === 'trash') return n.isDeleted;
       if (activeView === 'favorites') return !n.isDeleted && n.isFavorite;
       return !n.isDeleted;
     });
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      list = list.filter(n => {
-        const titleMatch = n.title.toLowerCase().includes(term);
-        const contentMatch = !n.encrypted && n.content.toLowerCase().includes(term);
-        const tagsMatch = (n.tags || []).some(tag => tag.toLowerCase().includes(term));
-        return titleMatch || contentMatch || tagsMatch;
-      });
-    }
-    if (typeFilter !== 'all') {
-      list = list.filter(n => n.type === typeFilter);
-    }
-    if (tagFilter !== 'all') {
-      list = list.filter(n => (n.tags || []).includes(tagFilter));
-    }
-    // Pinned first
+
     return [...list.filter(n => n.isPinned), ...list.filter(n => !n.isPinned)];
-  }, [notes, activeView, searchTerm, typeFilter, tagFilter]);
+  }, [notes, activeView]);
+
+  const searchTags = useMemo(() => {
+    const tags = new Set();
+    browseNotes.forEach(note => (note.tags || []).forEach(tag => tags.add(tag)));
+    return [...tags].sort((a, b) => a.localeCompare(b));
+  }, [browseNotes]);
+
+  const searchOptions = useMemo(() => ({
+    excludeProtectedNotes: settings.globalPinEnabled && settings.hideProtectedSearch,
+    isProtectedNote,
+  }), [isProtectedNote, settings.globalPinEnabled, settings.hideProtectedSearch]);
+
+  const { searchState, searchActions } = useNoteSearch({ notes: browseNotes, searchOptions });
+  const {
+    openPanel: openSearchPanel,
+    closePanel: closeSearchPanel,
+    setQuery: setSearchQuery,
+    clearQuery: clearSearchQuery,
+    rememberQuery,
+    applyRecentSearch,
+    setTypeFilter: setSearchTypeFilter,
+    toggleTagFilter: toggleSearchTagFilter,
+    resetFilters: resetSearchFilters,
+  } = searchActions;
+  const displayedNotesCount = searchState.isOpen ? searchState.results.length : browseNotes.length;
+
+  useEffect(() => {
+    if (!searchState.isOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (sidebarSearchRef.current && !sidebarSearchRef.current.contains(event.target)) {
+        closeSearchPanel({ clearQueryOnClose: true });
+        resetSearchFilters();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [closeSearchPanel, resetSearchFilters, searchState.isOpen]);
 
   const activeNote = notes.find(n => n.id === activeNoteId);
   const activeNoteText = useMemo(() => {
@@ -335,76 +435,99 @@ function App() {
     if (length <= 26) return 'toolbar-note-title-medium';
     return 'toolbar-note-title-small';
   }, [activeNote]);
-  const isNoteUnlocked = useCallback((id) => {
-    if (settings.globalPinEnabled && settings.masterKeyEnabled && globalUnlocked) return true;
-    return unlockedNotes.has(id);
-  }, [settings.globalPinEnabled, settings.masterKeyEnabled, globalUnlocked, unlockedNotes]);
 
-  // Initial Boot-up Lock & Event listeners for AutoLock
-  useEffect(() => {
-    if (!window.electron) return;
-    
-    // Attempt Touch ID at startup if enabled
-    if (settings.globalPinEnabled) {
-       setIsLocked(true); 
-    }
-    
-    let isCleanup = false;
-    window.electron.system.onBlur(() => { if (!isCleanup) blurTimeRef.current = Date.now(); });
-    window.electron.system.onFocus(() => {
-      if (isCleanup || !settings.globalPinEnabled || settings.autoLockTime === -1) return;
-      if (blurTimeRef.current) {
-        const diffMins = (Date.now() - blurTimeRef.current) / 60000;
-        if (diffMins >= settings.autoLockTime) {
-          setIsLocked(true);
-          setGlobalUnlocked(false);
-        }
-        blurTimeRef.current = null;
-      }
-    });
-    return () => { isCleanup = true; };
-  }, [settings.globalPinEnabled, settings.autoLockTime]);
+  // Unified note-open entry: protected notes must always pass requireAuth().
+  const openNoteById = useCallback(async (id) => {
+    const note = notes.find(item => item.id === id);
+    if (!note) return;
 
-  const handleNoteClick = (id) => {
-    update(id, { lastOpenedAt: new Date().toISOString() });
     setActiveNoteId(id);
     setIsMdPreview(false);
     setIsEditorSearchOpen(false);
     setEditorActions({ canUndo: false, canRedo: false, undo: null, redo: null });
-    setIsSidebarSearchFocused(false);
     setIsNoteInfoOpen(false);
-  };
 
-  // Handle global unlock success
-  const handleGlobalUnlock = () => {
-    setIsLocked(false);
-    setGlobalUnlocked(true);
-    if (pendingView) {
-      setActiveView(pendingView);
-      setPendingView(null);
-    }
-  };
-
-  const handleNavClick = async (view) => {
-    if (view === 'trash' && settings.globalPinEnabled && !globalUnlocked) {
-      if (settings.touchIdEnabled && window.electron && await window.electron.security.promptTouchID('Unlock Trash')) {
-        setGlobalUnlocked(true);
-        setActiveView(view);
-      } else {
-        setPendingView(view);
-        setIsLocked(true);
-      }
+    if (isProtectedNote(note)) {
+      setProtectedPreviewNoteId(id);
       return;
     }
+
+    setProtectedPreviewNoteId(null);
+    update(id, { lastOpenedAt: new Date().toISOString() });
+  }, [isProtectedNote, notes]);
+
+  const handleAuthenticateProtectedNote = useCallback(async (noteId) => {
+    const note = notes.find(item => item.id === noteId);
+    if (!note) return;
+    const allowed = await requireAuth({ reason: 'protected-note', force: true });
+    if (!allowed) return;
+    setProtectedPreviewNoteId(null);
+    update(noteId, { lastOpenedAt: new Date().toISOString() });
+  }, [notes, requireAuth]);
+
+  const handleDisableGlobalPinRequest = useCallback(async () => {
+    const protectedNote = notes.find(note => isProtectedNote(note));
+    if (protectedNote) {
+      return {
+        ok: false,
+        message: lang === 'en'
+          ? `Global password cannot be disabled because "${protectedNote.title || t('untitled')}" is still protected.`
+          : lang === 'zh-TW'
+            ? `由於「${protectedNote.title || t('untitled')}」仍處於受保護狀態，無法關閉全局密碼。`
+            : `由于「${protectedNote.title || t('untitled')}」处于保护状态，无法关闭全局密码。`,
+      };
+    }
+
+    const allowed = await requireAuth({ reason: 'disable-security', force: true, mode: 'password' });
+    if (!allowed) {
+      return { ok: false };
+    }
+
+    await disablePassword();
+    return { ok: true };
+  }, [disablePassword, isProtectedNote, lang, notes, requireAuth, t]);
+
+  const handleDisableBiometricRequest = useCallback(async () => {
+    const allowed = await requireAuth({ reason: 'disable-biometric', force: true, mode: 'biometric' });
+    if (!allowed) {
+      return { ok: false };
+    }
+    await disableBiometric();
+    return { ok: true };
+  }, [disableBiometric, requireAuth]);
+
+  useEffect(() => {
+    if (!isDetachedWindow || !detachedNoteId) return;
+    openNoteById(Number(detachedNoteId));
+  }, [detachedNoteId, isDetachedWindow, openNoteById]);
+
+  const handleNoteClick = useCallback(async (id) => {
+    await openNoteById(id);
+  }, [openNoteById]);
+
+  const handleSearchResultSelect = useCallback(async (note) => {
+    rememberQuery();
+    closeSearchPanel({ clearQueryOnClose: true });
+    resetSearchFilters();
+    await openNoteById(note.id);
+  }, [closeSearchPanel, openNoteById, rememberQuery, resetSearchFilters]);
+
+  const handleNavClick = useCallback(async (view) => {
+    if (view === 'trash' && settings.trashAuthEnabled && isSecurityEnabled) {
+      const allowed = await requireAuth({ reason: 'trash', force: true });
+      if (!allowed) return;
+    }
     setActiveView(view);
-  };
+    closeSearchPanel({ clearQueryOnClose: true });
+    resetSearchFilters();
+  }, [closeSearchPanel, isSecurityEnabled, requireAuth, resetSearchFilters, settings.trashAuthEnabled]);
 
   const handleNewNote = useCallback((type) => {
     const now = new Date().toISOString();
     const n = {
       id: Date.now(), title: '', content: '', type,
       isFavorite: false, isDeleted: false, isPinned: false,
-      encrypted: false, starred: false,
+      encrypted: false, protected: false, starred: false,
       tags: [],
       createdAt: now,
       modifiedAt: now,
@@ -418,7 +541,7 @@ function App() {
   const update = (id, patch) => setNotes(prev => prev.map(n => n.id === id ? {
     ...n,
     ...patch,
-    modifiedAt: patch.modifiedAt ?? (('content' in patch || 'title' in patch || 'tags' in patch || 'encrypted' in patch || '_pwMarker' in patch || 'isFavorite' in patch || 'isPinned' in patch || 'isDeleted' in patch) ? new Date().toISOString() : n.modifiedAt),
+    modifiedAt: patch.modifiedAt ?? (('content' in patch || 'title' in patch || 'tags' in patch || 'encrypted' in patch || 'protected' in patch || 'isFavorite' in patch || 'isPinned' in patch || 'isDeleted' in patch) ? new Date().toISOString() : n.modifiedAt),
   } : n));
 
   const handleTitleChange = (id, title) => update(id, { title });
@@ -441,23 +564,22 @@ function App() {
     update(id, { isFavorite: !notes.find(n => n.id === id)?.isFavorite });
   };
 
-  // Security check for deletion
-  const canDeleteNote = useCallback((id) => {
-    const note = notes.find(n => n.id === id);
-    if (!note) return false;
-    if (note.encrypted && !isNoteUnlocked(note.id)) {
-      toast(t('unlockToDelete') || 'Please unlock the note before deleting.', 'error');
-      return false;
-    }
-    return true;
-  }, [notes, isNoteUnlocked, t]);
-
   const handleSoftDelete = useCallback((e, id) => {
-    if (e) e.stopPropagation();
-    if (!canDeleteNote(id)) return;
-    update(id, { isDeleted: true });
-    if (activeNoteId === id) setActiveNoteId(null);
-  }, [canDeleteNote, activeNoteId]);
+    (async () => {
+      if (e) e.stopPropagation();
+      const note = notes.find(n => n.id === id);
+      if (!note) return;
+      if (isProtectedNote(note)) {
+        const allowed = await requireAuth({ reason: 'delete-protected-note', force: true });
+        if (!allowed) return;
+      }
+      update(id, { isDeleted: true });
+      if (activeNoteId === id) {
+        setActiveNoteId(null);
+        setProtectedPreviewNoteId(null);
+      }
+    })();
+  }, [activeNoteId, isProtectedNote, notes, requireAuth]);
 
   const handleRestore = useCallback((e, id) => {
     if (e) e.stopPropagation();
@@ -465,58 +587,54 @@ function App() {
   }, []);
 
   const requestPermanentDelete = (e, id) => {
-    if (e) e.stopPropagation();
-    if (!canDeleteNote(id)) return;
-    setConfirmModal({ type: 'single', payload: id });
+    (async () => {
+      if (e) e.stopPropagation();
+      const note = notes.find(n => n.id === id);
+      if (!note) return;
+      if (isProtectedNote(note)) {
+        const allowed = await requireAuth({ reason: 'delete-protected-note', force: true });
+        if (!allowed) return;
+      }
+      setConfirmModal({ type: 'single', payload: id });
+    })();
   };
 
   const confirmPermanentDelete = () => {
     if (!confirmModal) return;
     if (confirmModal.type === 'single') {
       setNotes(prev => prev.filter(n => n.id !== confirmModal.payload));
-      if (activeNoteId === confirmModal.payload) setActiveNoteId(null);
+      if (activeNoteId === confirmModal.payload) {
+        setActiveNoteId(null);
+        setProtectedPreviewNoteId(null);
+      }
     } else if (confirmModal.type === 'empty') {
       setNotes(prev => prev.filter(n => !n.isDeleted));
-      if (notes.find(n => n.id === activeNoteId)?.isDeleted) setActiveNoteId(null);
+      if (notes.find(n => n.id === activeNoteId)?.isDeleted) {
+        setActiveNoteId(null);
+        setProtectedPreviewNoteId(null);
+      }
     }
     setConfirmModal(null);
   };
 
   const handlePin = (id) => update(id, { isPinned: !notes.find(n => n.id === id)?.isPinned });
 
-  // ── Encryption ──────────────────────────────────────────────────────────────
   const handleToggleEncryption = useCallback((note) => {
     if (!note) return;
-    if (!note.encrypted) {
-      // Encrypt: open password modal to set
-      setPasswordModal({ note, mode: 'set' });
-    } else {
-      // Decrypt (remove encryption entirely): open password modal to verify, then unlock
-      setPasswordModal({ note, mode: 'unlock' });
+    if (!isSecurityEnabled) {
+      toast(t('globalPinDesc') || 'Enable global PIN first.', 'error');
+      return;
     }
-  }, [setPasswordModal]);
-
-  const handlePasswordConfirm = useCallback((password) => {
-    if (!passwordModal) return;
-    const { note, mode } = passwordModal;
-
-    if (mode === 'set') {
-      const marker = btoa(unescape(encodeURIComponent(password)));
-      update(note.id, { encrypted: true, _pwMarker: marker });
-      setUnlockedNotes(prev => { const n = new Set(prev); n.delete(note.id); return n; });
-      toast(t('encryptNoteTitle') || 'Note encrypted successfully.', 'success');
-    } else if (mode === 'unlock') {
-      const marker = btoa(unescape(encodeURIComponent(password)));
-      if (marker !== note._pwMarker) {
-        toast(t('incorrectPin') || 'Incorrect password.', 'error');
-        return;
-      }
-      update(note.id, { encrypted: false, _pwMarker: null });
-      setUnlockedNotes(prev => { const n = new Set(prev); n.delete(note.id); return n; });
-      toast(t('unlockNote') || 'Encryption removed.', 'success');
+    const nextProtected = !isProtectedNote(note);
+    update(note.id, { encrypted: nextProtected, protected: nextProtected });
+    if (nextProtected && activeNoteId === note.id) {
+      setProtectedPreviewNoteId(note.id);
+      setIsNoteInfoOpen(false);
+    } else if (!nextProtected && protectedPreviewNoteId === note.id) {
+      setProtectedPreviewNoteId(null);
     }
-    setPasswordModal(null);
-  }, [passwordModal, toast, update, t, setPasswordModal]);
+    toast(nextProtected ? (t('encryptNoteTitle') || 'Protected note enabled.') : (t('unlockNote') || 'Protected note disabled.'), 'success');
+  }, [activeNoteId, isProtectedNote, isSecurityEnabled, protectedPreviewNoteId, t, toast]);
 
   // Trigger file download using native <a> tag
   const downloadFile = useCallback((content, filename, mimeType) => {
@@ -538,20 +656,22 @@ function App() {
   }, [toast]);
 
   const handleExport = useCallback((note) => {
-    if (!note) return;
-    if (note.encrypted && !isNoteUnlocked(note.id)) {
-      toast('Please unlock the note first to export it.', 'error');
-      return;
-    }
-    // Rich text: export directly as .txt (strip HTML)
-    if (note.type !== 'markdown') {
-      const stripped = note.content.replace(/<[^>]*>/g, '');
-      downloadFile(stripped, `${note.title || 'Untitled_Note'}.txt`);
-      return;
-    }
-    // Markdown: open clean UI modal to choose .md or .txt
-    setExportModal(note);
-  }, [downloadFile]);
+    (async () => {
+      if (!note) return;
+      if (isProtectedNote(note)) {
+        const allowed = await requireAuth({ reason: 'protected-note', force: true });
+        if (!allowed) return;
+      }
+      // Rich text: export directly as .txt (strip HTML)
+      if (note.type !== 'markdown') {
+        const stripped = note.content.replace(/<[^>]*>/g, '');
+        downloadFile(stripped, `${note.title || 'Untitled_Note'}.txt`);
+        return;
+      }
+      // Markdown: open clean UI modal to choose .md or .txt
+      setExportModal(note);
+    })();
+  }, [downloadFile, isProtectedNote, requireAuth]);
 
   const handleExportWithFormat = useCallback((ext) => {
     if (!exportModal) return;
@@ -576,8 +696,16 @@ function App() {
 
   const handleDetachActiveNote = useCallback(async () => {
     if (!activeNoteId || !window.electron?.window?.detachNote) return;
+    const note = notes.find(item => item.id === activeNoteId);
+    if (!note) return;
+    // Detached windows also require authentication unless the note itself is protected
+    // (protected note already has its own auth gate on open).
+    if (!isProtectedNote(note) && isSecurityEnabled) {
+      const allowed = await requireAuth({ reason: 'open-detached-window', force: true });
+      if (!allowed) return;
+    }
     await window.electron.window.detachNote(activeNoteId);
-  }, [activeNoteId]);
+  }, [activeNoteId, isProtectedNote, isSecurityEnabled, notes, requireAuth]);
   const handleRestoreDetachedNote = useCallback(async () => {
     if (!window.electron?.window?.restoreNote) return;
     await window.electron.window.restoreNote();
@@ -591,17 +719,16 @@ function App() {
 
   return (
     <div className={`app-container antialiased ${isBooting ? 'app-booting' : ''}`}>
-      {isLocked && <AutoLockScreen onUnlock={handleGlobalUnlock} />}
+      {securityState.isLocked && (
+        <AutoLockScreen
+          reason={securityState.pendingReason}
+          canUseBiometric={settings.globalPinEnabled && settings.touchIdEnabled && securityState.pendingAuthMode !== 'password'}
+          onUnlock={unlockWithPassword}
+          onBiometricUnlock={() => unlockWithBiometric(getBiometricPromptMessage(securityState.pendingReason))}
+        />
+      )}
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-
-      <PasswordModal
-        isOpen={!!passwordModal}
-        mode={passwordModal?.mode}
-        noteTitle={passwordModal?.note?.title}
-        onConfirm={handlePasswordConfirm}
-        onCancel={() => setPasswordModal(null)}
-      />
 
       {/* Export Modal (for Markdown format choice) */}
       <ExportModal
@@ -671,6 +798,11 @@ function App() {
         </div>
 
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {isSecurityEnabled && (
+            <button onClick={() => lockApp('manual')} className="nav-item" title={t('lockImmediate')}>
+              <Lock size={20} />
+            </button>
+          )}
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="nav-item" title={t('toggleSidebar') || 'Toggle Sidebar'}>
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
           </button>
@@ -682,14 +814,14 @@ function App() {
 
       {/* Column 2: Note List */}
       <aside className="note-list-column" style={{ width: isSidebarOpen ? 280 : 0, transition: 'width 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-        <div style={{ width: 280, display: 'flex', flexDirection: 'column', height: '100%', opacity: isSidebarOpen ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isSidebarOpen ? 'auto' : 'none' }}>
+        <div ref={sidebarSearchRef} style={{ width: 280, display: 'flex', flexDirection: 'column', height: '100%', opacity: isSidebarOpen ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isSidebarOpen ? 'auto' : 'none' }}>
         <div className="column-header">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-main)', textTransform: 'capitalize' }}>
               {activeView === 'notes' ? t('allNotes') : activeView === 'favorites' ? t('favorites') : t('trash')}
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {activeView === 'trash' && filteredNotes.length > 0 && (
+              {activeView === 'trash' && browseNotes.length > 0 && (
                 <button
                   onClick={() => setConfirmModal({ type: 'empty' })}
                   style={{ fontSize: 11, padding: '4px 8px', borderRadius: 8, background: dangerSoft, color: dangerText, fontWeight: 600, border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
@@ -699,131 +831,71 @@ function App() {
                   {t('emptyTrash')}
                 </button>
               )}
-              <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--accent-soft)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 99 }}>{filteredNotes.length}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--accent-soft)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 99 }}>{displayedNotesCount}</span>
             </div>
           </div>
-          <div className="search-input-wrapper">
-            <Search size={14} />
-            <input
-              type="text"
-              placeholder={t('searchPlaceholder')}
-              value={searchTerm}
-              onFocus={() => setIsSidebarSearchFocused(true)}
-              onBlur={() => setTimeout(() => { if (!searchTerm) setIsSidebarSearchFocused(false); }, 120)}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
-          </div>
-          
-          {/* Type Filter Slider */}
-          <div style={{ display: 'flex', background: 'var(--surface-elevated)', borderRadius: 8, padding: 2, marginTop: 12, border: '1px solid var(--border-color)' }}>
-             {[
-               { id: 'all', label: t('allNotes') || 'All' },
-               { id: 'rich', label: t('richText') || 'Rich Text' },
-               { id: 'markdown', label: t('markdown') || 'Markdown' }
-             ].map(type => (
-               <button
-                 key={type.id}
-                 onClick={() => setTypeFilter(type.id)}
-                 style={{
-                   flex: 1, padding: '4px 0', fontSize: 11, fontWeight: 600, borderRadius: 6,
-                   background: typeFilter === type.id ? 'var(--surface-strong)' : 'transparent',
-                   color: typeFilter === type.id ? 'var(--text-main)' : 'var(--text-muted)',
-                   boxShadow: typeFilter === type.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                   transition: 'all 0.15s ease', border: 'none', cursor: 'pointer'
-                 }}
-               >
-                 {type.label}
-               </button>
-             ))}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <Tags size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
-              <select
-                value={tagFilter}
-                onChange={e => setTagFilter(e.target.value)}
+          <div className="search-input-row">
+            <div className="search-input-wrapper">
+              <Search size={14} className="search-input-icon" />
+              <input
+                type="text"
+                placeholder={t('searchPlaceholder')}
+                value={searchState.query}
+                onFocus={openSearchPanel}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    rememberQuery();
+                  }
+                  if (e.key === 'Escape') {
+                    closeSearchPanel({ clearQueryOnClose: true });
+                    resetSearchFilters();
+                  }
+                }}
                 className="search-input"
-                style={{ paddingLeft: 32, appearance: 'none' }}
-              >
-                <option value="all">{t('allTags')}</option>
-                {allTags.map(tag => (
-                  <option key={tag} value={tag}>#{tag}</option>
-                ))}
-              </select>
+              />
+              {!!searchState.query && (
+                <button
+                  onClick={() => {
+                    clearSearchQuery();
+                    resetSearchFilters();
+                  }}
+                  className="search-clear-btn"
+                  title={t('clear') || 'Clear'}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => setIsSidebarSearchFocused(v => !v)}
-              style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 58, textAlign: 'right', padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--surface-primary)' }}
-            >
-              {t('searchScope')}
-            </button>
+            {searchState.isOpen && (
+              <button
+                onClick={() => {
+                  closeSearchPanel({ clearQueryOnClose: true });
+                  resetSearchFilters();
+                }}
+                className="search-exit-btn"
+                title={lang === 'en' ? 'Exit search' : lang === 'zh-TW' ? '退出搜尋' : '退出搜索'}
+              >
+                <EyeOff size={14} />
+                <span>{lang === 'en' ? 'Exit' : lang === 'zh-TW' ? '退出' : '退出'}</span>
+              </button>
+            )}
           </div>
         </div>
 
         <div className="note-card-list">
-          {isSidebarSearchFocused ? (
-            <div style={{ padding: '14px 16px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 10 }}>
-                  {t('recentLabel')}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {recentNotes.map(note => (
-                    <button
-                      key={note.id}
-                      onClick={() => handleNoteClick(note.id)}
-                      style={{ justifyContent: 'space-between', width: '100%', padding: '10px 12px', borderRadius: 10, background: 'var(--surface-primary)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
-                    >
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'left' }}>{note.title || t('untitled')}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{note.type === 'rich' ? t('richText') : t('markdown')}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 10 }}>
-                  {t('searchScope')}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <button onClick={() => setTypeFilter('rich')} style={{ padding: '8px 12px', borderRadius: 999, background: typeFilter === 'rich' ? 'var(--accent)' : 'var(--surface-primary)', color: typeFilter === 'rich' ? '#fff' : 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-                    {t('searchRichText')}
-                  </button>
-                  <button onClick={() => setTypeFilter('markdown')} style={{ padding: '8px 12px', borderRadius: 999, background: typeFilter === 'markdown' ? 'var(--accent)' : 'var(--surface-primary)', color: typeFilter === 'markdown' ? '#fff' : 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-                    {t('searchMarkdown')}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 10 }}>
-                  {t('searchByTag')}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <button
-                    onClick={() => setTagFilter('all')}
-                    style={{ padding: '8px 12px', borderRadius: 999, background: tagFilter === 'all' ? 'var(--accent)' : 'var(--surface-primary)', color: tagFilter === 'all' ? '#fff' : 'var(--text-main)', border: '1px solid var(--border-color)' }}
-                  >
-                    {t('allTags')}
-                  </button>
-                  {allTags.length ? allTags.map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => setTagFilter(tag)}
-                      style={{ padding: '8px 12px', borderRadius: 999, background: tagFilter === tag ? 'var(--accent)' : 'var(--accent-soft)', color: tagFilter === tag ? '#fff' : 'var(--accent)', border: '1px solid var(--border-color)' }}
-                    >
-                      #{tag}
-                    </button>
-                  )) : (
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noTagsYet')}</span>
-                  )}
-                </div>
-              </div>
-            </div>
+          {searchState.isOpen ? (
+            <SidebarSearchPanel
+              searchState={searchState}
+              tags={searchTags}
+              onSelectNote={handleSearchResultSelect}
+              onSelectRecent={applyRecentSearch}
+              onTypeChange={setSearchTypeFilter}
+              onToggleTag={toggleSearchTagFilter}
+            />
           ) : (
           <>
-          {filteredNotes.map(note => (
+          {browseNotes.map(note => (
             <div
               key={note.id}
               onClick={() => handleNoteClick(note.id)}
@@ -832,7 +904,7 @@ function App() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, minWidth: 0 }}>
                 {note.isPinned && <Pin size={10} style={{ color: '#f59e0b', flexShrink: 0, fill: '#f59e0b' }} />}
-                {note.encrypted && <Lock size={10} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+                {isProtectedNote(note) && <Lock size={10} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
                 <span style={{ flexShrink: 0, color: note.type === 'rich' ? 'var(--accent)' : '#10b981', display: 'flex' }}>
                   {note.type === 'rich' ? <FileText size={13} /> : <Code size={13} />}
                 </span>
@@ -851,10 +923,10 @@ function App() {
               )}
               <p style={{
                 margin: 0, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', height: 18,
-                color: note.encrypted ? 'var(--accent)' : 'var(--text-muted)',
-                fontStyle: note.encrypted ? 'italic' : 'normal',
+                color: isProtectedNote(note) ? 'var(--accent)' : 'var(--text-muted)',
+                fontStyle: isProtectedNote(note) ? 'italic' : 'normal',
               }}>
-                {note.encrypted ? t('textEncrypted') : (note.content ? note.content.replace(/<[^>]*>/g, '').substring(0, 50) : t('noContentYet'))}
+                {isProtectedNote(note) ? t('textEncrypted') : (note.content ? note.content.replace(/<[^>]*>/g, '').substring(0, 50) : t('noContentYet'))}
               </p>
               <div className="note-card-meta">
                 <span>{t('createdAt') || 'Created at'}: {formatDistanceToNow(new Date(note.createdAt), { locale: locales[lang] || enUS, addSuffix: true })}</span>
@@ -897,7 +969,7 @@ function App() {
               </div>
             </div>
           ))}
-          {filteredNotes.length === 0 && (
+          {browseNotes.length === 0 && (
             <div style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.25 }}>
               <FileBox size={32} style={{ margin: '0 auto 12px' }} />
               <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('emptyStateTitle')}</p>
@@ -975,10 +1047,10 @@ function App() {
                   <button onClick={() => handleExport(activeNote)} title={t('export')} style={{ color: 'var(--text-muted)', padding: 4 }}><Download size={17} /></button>
                   <button
                     onClick={() => handleToggleEncryption(activeNote)}
-                    title={activeNote.encrypted ? t('noteEncryptedMsg') : t('encryptNote')}
-                    style={{ color: activeNote.encrypted ? 'var(--accent)' : 'var(--text-muted)', transition: 'color 0.15s', padding: 4 }}
+                    title={isProtectedNote(activeNote) ? t('noteEncryptedMsg') : t('encryptNote')}
+                    style={{ color: isProtectedNote(activeNote) ? 'var(--accent)' : 'var(--text-muted)', transition: 'color 0.15s', padding: 4 }}
                   >
-                    {activeNote.encrypted ? <Lock size={17} /> : <Unlock size={17} />}
+                    {isProtectedNote(activeNote) ? <Lock size={17} /> : <Unlock size={17} />}
                   </button>
                   <button
                     onClick={isDetachedWindow ? handleRestoreDetachedNote : handleDetachActiveNote}
@@ -1006,8 +1078,7 @@ function App() {
                           [t('modifiedAt'), formattedModifiedAt],
                           [t('createdTime'), formattedCreatedAt],
                           [t('tagsLabel'), (activeNote.tags || []).length ? activeNote.tags.map(tag => `#${tag}`).join(', ') : '—'],
-                          [t('wordsLabel'), String(activeNoteStats.words)],
-                          [t('charactersLabel'), String(activeNoteStats.characters)],
+                          [lang.startsWith('zh') ? t('charactersLabel') : t('wordsLabel'), String(lang.startsWith('zh') ? activeNoteStats.characters : activeNoteStats.words)],
                         ].map(([label, value]) => (
                           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--border-color)' }}>
                             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{label}</span>
@@ -1028,21 +1099,23 @@ function App() {
           isOpen={isSettingsOpen} 
           onClose={() => setIsSettingsOpen(false)} 
           notes={notes}
-          onUnlockAll={() => {
-            setNotes(prev => prev.map(n => n.encrypted ? { ...n, encrypted: false, _pwMarker: null } : n));
-            toast('Successfully unlocked all encrypted notes', 'success');
-          }}
+          securityState={securityState}
+          onEnableGlobalPin={enablePassword}
+          onDisableGlobalPin={handleDisableGlobalPinRequest}
+          onEnableBiometric={enableBiometric}
+          onDisableBiometric={handleDisableBiometricRequest}
         />
 
         {activeNote ? (
             <div className="editor-scroll-surface">
-              {activeNote.encrypted && !isNoteUnlocked(activeNote.id) ? (
-                <LockedNoteView
-                  key={`locked-${activeNote.id}`}
-                  note={activeNote}
-                  onUnlock={() => setUnlockedNotes(prev => { const n = new Set(prev); n.add(activeNote.id); return n; })}
-                />
-              ) : (
+                {isProtectedNote(activeNote) && protectedPreviewNoteId === activeNote.id ? (
+                  <ProtectedNotePrompt
+                    title={activeNote.title}
+                    onAuthenticate={() => handleAuthenticateProtectedNote(activeNote.id)}
+                    t={t}
+                    lang={lang}
+                  />
+                ) : (
                 <div className="editor-content-wrapper">
                   <div className="editor-inline-meta">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
@@ -1092,7 +1165,7 @@ function App() {
                     )}
                   </div>
                 </div>
-              )}
+                )}
             </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

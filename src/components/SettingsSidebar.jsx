@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { X, User, Lock, Cloud, Globe, Type, Code, Hash, Info, Heart, ChevronRight, Shield, FileText } from 'lucide-react';
+import { X, User, Lock, Cloud, Globe, Type, Code, Hash, Info, Heart, ChevronRight, Fingerprint, FileText } from 'lucide-react';
 import { useSettings, useTranslation } from '../context/SettingsContext';
 import { useToast } from './Toast';
 import PinSetupModal from './PinSetupModal';
+import appLogoSrc from '/icon.png';
 
-export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
-  const { settings, systemAppearance, availableThemes, toggleLineNumbers, toggleSyntaxHighlighting, updateFontSize, setLanguage, updateSecuritySettings, setTheme } = useSettings();
+export default function SettingsModal({ isOpen, onClose, notes, securityState, onEnableGlobalPin, onDisableGlobalPin, onEnableBiometric, onDisableBiometric }) {
+  const { settings, systemAppearance, availableThemes, lightThemes, darkThemes, toggleLineNumbers, toggleSyntaxHighlighting, updateFontSize, setLanguage, updateSecuritySettings, setTheme } = useSettings();
   const { t, lang } = useTranslation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('account'); // 'account', 'general', 'security', 'about'
+  const [activeTab, setActiveTab] = useState('general');
+  const [generalSubTab, setGeneralSubTab] = useState('appearance');
   const [pinModal, setPinModal] = useState({ isOpen: false, mode: 'set', action: null });
   const isChineseUi = lang.startsWith('zh');
 
@@ -21,9 +23,12 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
   const tabs = [
     { id: 'account', label: t('accountSection'), icon: <User size={16} /> },
     { id: 'general', label: t('generalSection'), icon: <Globe size={16} /> },
-    { id: 'security', label: t('securitySection') || 'Security', icon: <Shield size={16} /> },
+    { id: 'security', label: t('securitySection') || 'Security', icon: <Lock size={16} /> },
     { id: 'about', label: t('aboutSection'), icon: <Info size={16} /> },
   ];
+  const selectableThemes = settings.followSystem
+    ? (systemAppearance === 'dark' ? darkThemes : lightThemes)
+    : availableThemes;
 
   const themeOptions = [
     { id: 'white', bg: '#ffffff', border: '#e5e7eb', label: t('themeWhite') },
@@ -31,7 +36,10 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
     { id: 'sepia', bg: '#eadfc8', border: '#d6b98f', label: t('themeSepia') },
     { id: 'dim', bg: '#18191d', border: '#343a46', label: t('themeDim') },
     { id: 'black', bg: '#0a0b0d', border: '#2a2e36', label: t('themeBlack') },
-  ].filter(theme => availableThemes.includes(theme.id));
+  ].filter(theme => selectableThemes.includes(theme.id));
+  const activeThemeId = settings.followSystem
+    ? (systemAppearance === 'dark' ? settings.darkTheme : settings.lightTheme)
+    : settings.theme;
   const fontPresets = [
     { label: '小四', px: 12 },
     { label: '四号', px: 14 },
@@ -45,7 +53,6 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
   const hoverSurface = 'color-mix(in srgb, var(--surface-primary) 82%, var(--accent-soft) 18%)';
   const dangerSoft = 'color-mix(in srgb, #ef4444 16%, var(--surface-primary) 84%)';
   const dangerText = 'color-mix(in srgb, #ef4444 84%, var(--text-main) 16%)';
-
   return (
     <div
       style={{
@@ -108,12 +115,9 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
           </button>
 
           <div style={{ padding: '32px 40px', overflowY: 'auto', flex: 1 }}>
-            
             {/* Account Tab */}
             {activeTab === 'account' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                
-                {/* Login Banner */}
                 <div>
                   <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
                     {t('profileLabel') || 'Profile'}
@@ -141,7 +145,6 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                   </button>
                 </div>
 
-                {/* Account Settings (Greyed out) */}
                 <div style={{ opacity: 0.6, pointerEvents: 'none' }}>
                   <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Lock size={14} /> {t('accountSection')}
@@ -158,13 +161,35 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                     </div>
                   </div>
                 </div>
-
               </div>
             )}
-
+            
             {/* General Tab */}
             {activeTab === 'general' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--surface-primary)', border: '1px solid var(--border-color)', borderRadius: 10, padding: 4 }}>
+                  {[
+                    { id: 'appearance', label: t('appearanceSection') || 'Appearance' },
+                    { id: 'editor', label: t('generalSection') || 'Editor' },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setGeneralSubTab(item.id)}
+                      style={{
+                        padding: '7px 12px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: generalSubTab === item.id ? 'var(--surface-strong)' : 'transparent',
+                        color: generalSubTab === item.id ? 'var(--text-main)' : 'var(--text-muted)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
                 
                 {/* Language Switcher */}
                 <div>
@@ -194,9 +219,10 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                 </div>
 
                 {/* Editor Settings */}
+                {generalSubTab === 'editor' && (
                 <div>
                   <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                    {t('generalSection')}
+                    {lang === 'en' ? 'Editor' : lang === 'zh-TW' ? '編輯器' : '编辑器'}
                   </h3>
                   <div style={{ border: '1px solid var(--border-color)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface-strong)' }}>
                     
@@ -238,84 +264,20 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Type size={18} color="var(--text-muted)" />
-                        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('fontSize')}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        {settings.fontSizeStandard === 'px' ? (
-                          <>
-                            <input
-                              type="range" min="12" max="24" step="1"
-                              value={settings.fontSize}
-                              onChange={(e) => updateFontSize(Number(e.target.value))}
-                              style={{ accentColor: 'var(--accent)' }}
-                            />
-                            <span style={{ fontSize: 13, color: 'var(--text-muted)', width: 48, textAlign: 'right' }}>{settings.fontSize}px</span>
-                          </>
-                        ) : (
-                          <select
-                            value={settings.fontSize}
-                            onChange={(e) => updateFontSize(Number(e.target.value))}
-                            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', background: 'var(--surface-primary)', color: 'var(--text-main)' }}
-                          >
-                            {fontPresets.map(item => (
-                              <option key={item.label} value={item.px}>{item.label}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    </div>
-
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Hash size={18} color="var(--text-muted)" />
-                        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('fontStandard')}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {lang === 'en' ? 'Appearance controls moved to the Appearance section.' : lang === 'zh-TW' ? '字體與主題選項已移至「外觀」。' : '字体与主题选项已移至「外观」。'}
+                        </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-primary)', padding: 4, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                        {[
-                          { id: 'px', label: t('fontStandardPx') },
-                          { id: 'cn', label: t('fontStandardCn') },
-                        ].map(item => (
-                          <button
-                            key={item.id}
-                            onClick={() => updateSecuritySettings({ fontSizeStandard: item.id })}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: 8,
-                              background: settings.fontSizeStandard === item.id ? 'var(--surface-strong)' : 'transparent',
-                              color: settings.fontSizeStandard === item.id ? 'var(--text-main)' : 'var(--text-muted)',
-                              border: 'none'
-                            }}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderTop: '1px solid var(--border-color)', opacity: isChineseUi ? 1 : 0.5 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Type size={18} color="var(--text-muted)" />
-                        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('uiFont')}</span>
-                      </div>
-                      <select
-                        value={settings.fontFamily || 'system'}
-                        disabled={!isChineseUi}
-                        onChange={(e) => updateSecuritySettings({ fontFamily: e.target.value })}
-                        style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', background: 'var(--surface-primary)', color: 'var(--text-main)', minWidth: 120 }}
-                      >
-                        <option value="system">{t('fontSystem')}</option>
-                        <option value="kai">{t('fontKai')}</option>
-                        <option value="song">{t('fontSong')}</option>
-                      </select>
                     </div>
 
                   </div>
                 </div>
+                )}
 
                 {/* Appearance Settings */}
+                {generalSubTab === 'appearance' && (
                 <div>
                   <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
                     {t('appearanceSection') || 'Appearance'}
@@ -344,6 +306,81 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
 
                     {/* Theme Picker */}
                     <div style={{ padding: '16px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <Type size={18} color="var(--text-muted)" />
+                          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('fontSize')}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          {settings.fontSizeStandard === 'px' ? (
+                            <>
+                              <input
+                                type="range" min="12" max="24" step="1"
+                                value={settings.fontSize}
+                                onChange={(e) => updateFontSize(Number(e.target.value))}
+                                style={{ accentColor: 'var(--accent)' }}
+                              />
+                              <span style={{ fontSize: 13, color: 'var(--text-muted)', width: 48, textAlign: 'right' }}>{settings.fontSize}px</span>
+                            </>
+                          ) : (
+                            <select
+                              value={settings.fontSize}
+                              onChange={(e) => updateFontSize(Number(e.target.value))}
+                              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', background: 'var(--surface-primary)', color: 'var(--text-main)' }}
+                            >
+                              {fontPresets.map(item => (
+                                <option key={item.label} value={item.px}>{item.label}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <Hash size={18} color="var(--text-muted)" />
+                          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('fontStandard')}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-primary)', padding: 4, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                          {[
+                            { id: 'px', label: t('fontStandardPx') },
+                            { id: 'cn', label: t('fontStandardCn') },
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              onClick={() => updateSecuritySettings({ fontSizeStandard: item.id })}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                background: settings.fontSizeStandard === item.id ? 'var(--surface-strong)' : 'transparent',
+                                color: settings.fontSizeStandard === item.id ? 'var(--text-main)' : 'var(--text-muted)',
+                                border: 'none'
+                              }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: isChineseUi ? 1 : 0.5, marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <Type size={18} color="var(--text-muted)" />
+                          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('uiFont')}</span>
+                        </div>
+                        <select
+                          value={settings.fontFamily || 'system'}
+                          disabled={!isChineseUi}
+                          onChange={(e) => updateSecuritySettings({ fontFamily: e.target.value })}
+                          style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 13, outline: 'none', background: 'var(--surface-primary)', color: 'var(--text-main)', minWidth: 120 }}
+                        >
+                          <option value="system">{t('fontSystem')}</option>
+                          <option value="kai">{t('fontKai')}</option>
+                          <option value="song">{t('fontSong')}</option>
+                        </select>
+                      </div>
+
+                      <div style={{ height: 1, background: 'var(--border-color)', margin: '0 0 14px' }} />
                       <div style={{ display: 'flex', gap: 12 }}>
                         {themeOptions.map(theme => (
                           <button
@@ -352,12 +389,12 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                             title={theme.label}
                             style={{
                               width: 36, height: 36, borderRadius: '50%', background: theme.bg,
-                              border: `2px solid ${settings.theme === theme.id ? 'var(--accent)' : theme.border}`,
-                              padding: 0, position: 'relative', transform: settings.theme === theme.id ? 'scale(1.1)' : 'scale(1)',
+                              border: `2px solid ${activeThemeId === theme.id ? 'var(--accent)' : theme.border}`,
+                              padding: 0, position: 'relative', transform: activeThemeId === theme.id ? 'scale(1.1)' : 'scale(1)',
                               transition: 'transform 0.15s, border-color 0.15s', overflow: 'hidden'
                             }}
                           >
-                            {settings.theme === theme.id && (
+                            {activeThemeId === theme.id && (
                               <div style={{ 
                                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', 
                                 justifyContent: 'center', background: 'var(--accent-soft)' 
@@ -367,13 +404,14 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                         ))}
                       </div>
                       <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                        <span>{t('theme' + (settings.theme?.charAt(0).toUpperCase() + settings.theme?.slice(1)))}</span>
-                        <span>{systemAppearance === 'dark' ? t('themeDim') + ' / ' + t('themeBlack') : [t('themeWhite'), t('themeGray'), t('themeSepia')].join(' / ')}</span>
+                        <span>{t('theme' + (activeThemeId?.charAt(0).toUpperCase() + activeThemeId?.slice(1)))}</span>
+                        <span>{settings.followSystem ? (systemAppearance === 'dark' ? t('themeDim') + ' / ' + t('themeBlack') : [t('themeWhite'), t('themeGray'), t('themeSepia')].join(' / ')) : [t('themeWhite'), t('themeGray'), t('themeSepia'), t('themeDim'), t('themeBlack')].join(' / ')}</span>
                       </div>
                     </div>
 
                   </div>
                 </div>
+                )}
 
               </div>
             )}
@@ -400,9 +438,15 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                       <button 
                         onClick={async () => {
                           if (settings.globalPinEnabled) {
-                             if (window.electron) await window.electron.security.clearPin();
-                             updateSecuritySettings({ globalPinEnabled: false, masterKeyEnabled: false, autoLockTime: 0, touchIdEnabled: false });
-                             toast('Global PIN disabled.', 'success');
+                             const result = await onDisableGlobalPin?.();
+                             if (result?.message) {
+                               window.alert(result.message);
+                               return;
+                             }
+                             if (result?.ok) {
+                               updateSecuritySettings({ globalPinEnabled: false, autoLockTime: -1, touchIdEnabled: false });
+                               toast('Global PIN disabled.', 'success');
+                             }
                           } else {
                              setPinModal({ isOpen: true, mode: 'set', action: 'enable' });
                           }
@@ -419,25 +463,91 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                       </button>
                     </div>
 
-                    {/* Master Key Level */}
+                    {/* Biometric Unlock */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-color)', opacity: settings.globalPinEnabled ? 1 : 0.5, pointerEvents: settings.globalPinEnabled ? 'auto' : 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Shield size={18} color="var(--text-muted)" />
+                        <Fingerprint size={18} color="var(--text-muted)" />
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('masterKey')}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('masterKeyDesc')}</div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('touchId')}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('touchIdDesc')}</div>
                         </div>
                       </div>
                       <button 
-                        onClick={() => updateSecuritySettings({ masterKeyEnabled: !settings.masterKeyEnabled })}
+                        onClick={async () => {
+                          if (!securityState?.hasPassword) {
+                            toast(t('globalPinDesc'), 'error');
+                            return;
+                          }
+                          if (settings.touchIdEnabled) {
+                            const result = await onDisableBiometric?.();
+                            if (result?.ok) {
+                              updateSecuritySettings({ touchIdEnabled: false });
+                            } else {
+                              toast(t('touchIdDesc'), 'error');
+                            }
+                            return;
+                          }
+                          const enabled = await onEnableBiometric?.();
+                          if (enabled) {
+                            updateSecuritySettings({ touchIdEnabled: true });
+                          } else {
+                            toast(t('incorrectPin'), 'error');
+                          }
+                        }}
                         style={{
-                          width: 44, height: 24, borderRadius: 12, background: switchTrack(settings.masterKeyEnabled),
+                          width: 44, height: 24, borderRadius: 12, background: switchTrack(settings.touchIdEnabled),
                           position: 'relative', transition: 'background 0.2s', padding: 0, border: '1px solid var(--border-color)'
                         }}
                       >
                         <div style={{
                           width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2,
-                          left: settings.masterKeyEnabled ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          left: settings.touchIdEnabled ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* Trash Authentication */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-color)', opacity: settings.globalPinEnabled ? 1 : 0.5, pointerEvents: settings.globalPinEnabled ? 'auto' : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <FileText size={18} color="var(--text-muted)" />
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('trashAuth') || 'Trash verification'}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('trashAuthDesc') || 'Require authentication before opening the trash'}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => updateSecuritySettings({ trashAuthEnabled: !settings.trashAuthEnabled })}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, background: switchTrack(settings.trashAuthEnabled),
+                          position: 'relative', transition: 'background 0.2s', padding: 0, border: '1px solid var(--border-color)'
+                        }}
+                      >
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2,
+                          left: settings.trashAuthEnabled ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* Hide Protected Notes From Search */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-color)', opacity: settings.globalPinEnabled ? 1 : 0.5, pointerEvents: settings.globalPinEnabled ? 'auto' : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Lock size={18} color="var(--text-muted)" />
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)' }}>{t('hideProtectedSearch') || 'Hide protected notes from search'}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t('hideProtectedSearchDesc') || 'Protected notes will be excluded from sidebar search results'}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => updateSecuritySettings({ hideProtectedSearch: !settings.hideProtectedSearch })}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, background: switchTrack(settings.hideProtectedSearch),
+                          position: 'relative', transition: 'background 0.2s', padding: 0, border: '1px solid var(--border-color)'
+                        }}
+                      >
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2,
+                          left: settings.hideProtectedSearch ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                         }} />
                       </button>
                     </div>
@@ -472,15 +582,6 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
                      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
                        {t('encryptedNotes') || 'Encrypted Notes'}
                      </h3>
-                     {notes && notes.some(n => n.encrypted) && (
-                       <button onClick={() => {
-                         setPinModal({ isOpen: true, mode: 'verify', action: 'unlockAll' });
-                       }} style={{ background: dangerSoft, color: dangerText, fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'background 0.15s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = hoverSurface}
-                          onMouseLeave={e => e.currentTarget.style.background = dangerSoft}>
-                         {t('unlockAll')}
-                       </button>
-                     )}
                   </div>
                   <div style={{ border: '1px solid var(--border-color)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface-strong)' }}>
                      {notes?.filter(n => n.encrypted).length > 0 ? notes.filter(n => n.encrypted).map((n, i, arr) => (
@@ -501,7 +602,7 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
             {activeTab === 'about' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32, alignItems: 'center', textAlign: 'center', paddingTop: 24 }}>
                 <img 
-                  src="/icon.png" 
+                  src={appLogoSrc}
                   alt="TomaNotes Logo" 
                   style={{ 
                     width: 80, height: 80, borderRadius: 20, 
@@ -566,16 +667,10 @@ export default function SettingsModal({ isOpen, onClose, notes, onUnlockAll }) {
         onComplete={async (pin) => {
           setPinModal({ isOpen: false, mode: 'set', action: null });
           if (pinModal.action === 'enable') {
-            if (window.electron) await window.electron.security.setPin(pin);
-            const hasBio = window.electron ? await window.electron.security.canPromptTouchID() : false;
-            updateSecuritySettings({ globalPinEnabled: true, touchIdEnabled: hasBio });
-            toast('Global PIN enabled securely.', 'success');
-          } else if (pinModal.action === 'unlockAll') {
-            const valid = await window.electron?.security.verifyPin(pin);
-            if (valid) {
-              onUnlockAll();
-            } else {
-              toast(t('incorrectPin'), "error");
+            const enabled = await onEnableGlobalPin?.(pin);
+            if (enabled !== false) {
+              updateSecuritySettings({ globalPinEnabled: true, touchIdEnabled: false, autoLockTime: settings.autoLockTime === -1 ? 2 : settings.autoLockTime });
+              toast('Global PIN enabled securely.', 'success');
             }
           }
         }}
