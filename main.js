@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, safeStorage, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, safeStorage, systemPreferences, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -6,6 +6,7 @@ const userDataPath = app.getPath('userData');
 const settingsPath = path.join(userDataPath, 'security.json');
 let currentUiLanguage = 'zh-CN';
 let mainWindow = null;
+const detachedWindows = new Map();
 
 function saveSecurityConfig(data) {
     const existing = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
@@ -52,7 +53,34 @@ function createWindow(options = {}) {
 
     if (!detached) {
         mainWindow = win;
+    } else if (noteId) {
+        detachedWindows.set(Number(noteId), win);
     }
+
+    // Force all external links to open in the system browser.
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) {
+            shell.openExternal(url);
+            return { action: 'deny' };
+        }
+        return { action: 'allow' };
+    });
+
+    win.webContents.on('will-navigate', (event, url) => {
+        if (/^https?:\/\//i.test(url)) {
+            event.preventDefault();
+            shell.openExternal(url);
+        }
+    });
+
+    win.on('closed', () => {
+        if (detached && noteId) {
+            detachedWindows.delete(Number(noteId));
+        }
+        if (!detached && mainWindow === win) {
+            mainWindow = null;
+        }
+    });
 
     if (isDev) {
         win.loadURL(targets[0]).catch(() => {
@@ -177,8 +205,22 @@ ipcMain.on('ui:set-language', (_event, language) => {
     currentUiLanguage = language || 'zh-CN';
 });
 
+ipcMain.handle('system:open-external', async (_event, url) => {
+    if (!url || !/^https?:\/\//i.test(url)) return false;
+    await shell.openExternal(url);
+    return true;
+});
+
 ipcMain.handle('window:detach-note', (_event, noteId) => {
-    createWindow({ noteId, detached: true });
+    const normalizedId = Number(noteId);
+    const existing = detachedWindows.get(normalizedId);
+    if (existing && !existing.isDestroyed()) {
+        if (existing.isMinimized()) existing.restore();
+        existing.show();
+        existing.focus();
+        return true;
+    }
+    createWindow({ noteId: normalizedId, detached: true });
     return true;
 });
 

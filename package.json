@@ -1,6 +1,6 @@
 {
   "name": "tomanotes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Tan Qinghua <douyin@idbetterrun>",
   "description": "TomaNotes - Secure, encrypted knowledge base.",
   "main": "main.js",
@@ -21,6 +21,8 @@
     "files": [
       "dist/**/*",
       "main.js",
+      "preload.js",
+      "public/**/*",
       "package.json"
     ],
     "mac": {
