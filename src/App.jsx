@@ -245,7 +245,7 @@ function App() {
   const dangerText = 'color-mix(in srgb, #ef4444 84%, var(--text-main) 16%)';
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const detachedNoteId = query.get('note');
-  const isDetachedWindow = query.get('detached') === '1';
+  const isDetachedWindow = query.get('detached') === '1' || query.get('editor') === '1' || query.get('windowType') === 'editor';
   
   const [notes, setNotes] = useState(() => {
     const saved = localStorage.getItem('notes');

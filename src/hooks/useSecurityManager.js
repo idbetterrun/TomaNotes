@@ -27,6 +27,8 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
     securityStateRef.current = securityState;
   }, [securityState]);
 
+  const getBridge = useCallback(() => window.electronAPI || window.electron, []);
+
   const updateSecurityState = useCallback((patch) => {
     setSecurityState(prev => {
       const nextPatch = typeof patch === 'function' ? patch(prev) : patch;
@@ -76,15 +78,16 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
   }, [resolvePendingAuth, updateSecurityState]);
 
   const verifyPassword = useCallback(async (pin) => {
-    if (!window.electron?.security?.verifyPin) return false;
+    const bridge = getBridge();
+    if (!bridge?.security?.verifyPin) return false;
     try {
-      const verified = await window.electron.security.verifyPin(pin);
+      const verified = await bridge.security.verifyPin(pin);
       return !!verified;
     } catch (error) {
       console.error('[Security] Failed to verify PIN:', error);
       return false;
     }
-  }, []);
+  }, [getBridge]);
 
   const unlockWithPassword = useCallback(async (pin) => {
     const valid = await verifyPassword(pin);
@@ -94,15 +97,17 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
   }, [finishUnlock, verifyPassword]);
 
   const promptBiometric = useCallback(async (reason = 'Unlock TomaNotes') => {
-    if (!window.electron?.security?.promptTouchID) return false;
+    const bridge = getBridge();
+    const invokeBiometric = bridge?.auth?.biometric || bridge?.security?.promptTouchID;
+    if (!invokeBiometric) return false;
     try {
-      const verified = await window.electron.security.promptTouchID(reason);
+      const verified = await invokeBiometric(reason);
       return !!verified;
     } catch (error) {
       console.error('[Security] Failed to prompt Touch ID:', error);
       return false;
     }
-  }, []);
+  }, [getBridge]);
 
   const getBiometricPromptMessage = useCallback((reason = 'unlock') => {
     switch (reason) {
@@ -134,8 +139,9 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
   }, [finishUnlock, promptBiometric]);
 
   const enablePassword = useCallback(async (pin) => {
-    if (!window.electron?.security?.setPin) return false;
-    const success = await window.electron.security.setPin(pin);
+    const bridge = getBridge();
+    if (!bridge?.security?.setPin) return false;
+    const success = await bridge.security.setPin(pin);
     if (!success) return false;
     const now = Date.now();
     lastActiveRef.current = now;
@@ -151,11 +157,12 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
       lastActiveTime: now,
     });
     return true;
-  }, [updateSecurityState]);
+  }, [getBridge, updateSecurityState]);
 
   const disablePassword = useCallback(async () => {
-    if (window.electron?.security?.clearPin) {
-      await window.electron.security.clearPin();
+    const bridge = getBridge();
+    if (bridge?.security?.clearPin) {
+      await bridge.security.clearPin();
     }
     resolvePendingAuth(false);
     updateSecurityState({
@@ -169,7 +176,7 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
       unlockMethod: null,
     });
     return true;
-  }, [resolvePendingAuth, updateSecurityState]);
+  }, [getBridge, resolvePendingAuth, updateSecurityState]);
 
   const enableBiometric = useCallback(async () => {
     const current = securityStateRef.current;
@@ -226,8 +233,9 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
     let cancelled = false;
 
     const init = async () => {
-      const hasPassword = enabled && window.electron?.security?.hasPin
-        ? await window.electron.security.hasPin()
+      const bridge = getBridge();
+      const hasPassword = enabled && bridge?.security?.hasPin
+        ? await bridge.security.hasPin()
         : false;
 
       if (cancelled) return;
@@ -264,7 +272,7 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
     return () => {
       cancelled = true;
     };
-  }, [autoLockMinutes, biometricEnabled, enabled, updateSecurityState]);
+  }, [autoLockMinutes, biometricEnabled, enabled, getBridge, updateSecurityState]);
 
   useEffect(() => {
     if (!securityState.enabled || securityState.isLocked || !securityState.isAuthenticated) return undefined;
@@ -277,7 +285,8 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
   }, [recordActivity, securityState.enabled, securityState.isAuthenticated, securityState.isLocked]);
 
   useEffect(() => {
-    if (!window.electron?.system) return undefined;
+    const bridge = getBridge();
+    if (!bridge?.system) return undefined;
 
     const handleBlur = () => {
       blurAtRef.current = Date.now();
@@ -297,10 +306,10 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
       }
     };
 
-    window.electron.system.onBlur(handleBlur);
-    window.electron.system.onFocus(handleFocus);
+    bridge.system.onBlur(handleBlur);
+    bridge.system.onFocus(handleFocus);
     return undefined;
-  }, [lockApp]);
+  }, [getBridge, lockApp]);
 
   useEffect(() => {
     if (!securityState.enabled || securityState.autoLockMinutes === -1 || securityState.isLocked || !securityState.isAuthenticated) return undefined;

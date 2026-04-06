@@ -16,17 +16,32 @@ function getSecurityConfig() {
     return fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
 }
 
-function buildWindowUrl(noteId, detached) {
+function buildWindowTarget(noteId, detached) {
     const isDev = !app.isPackaged;
     const search = new URLSearchParams();
+    const windowType = detached ? 'editor' : 'main';
+    search.set('windowType', windowType);
     if (noteId) search.set('note', String(noteId));
-    if (detached) search.set('detached', '1');
-
-    if (isDev) {
-        return [`http://localhost:5173/?${search.toString()}`, `http://localhost:5174/?${search.toString()}`];
+    if (detached) {
+        search.set('detached', '1');
+        search.set('editor', '1');
     }
 
-    return [path.join(__dirname, 'dist/index.html')];
+    if (isDev) {
+        const query = search.toString();
+        return {
+            isDev: true,
+            urls: [`http://localhost:5173/?${query}`, `http://localhost:5174/?${query}`],
+            filePath: path.join(__dirname, 'dist/index.html'),
+            queryObject: Object.fromEntries(search.entries()),
+        };
+    }
+
+    return {
+        isDev: false,
+        filePath: path.join(__dirname, 'dist/index.html'),
+        queryObject: Object.fromEntries(search.entries()),
+    };
 }
 
 function createWindow(options = {}) {
@@ -48,8 +63,7 @@ function createWindow(options = {}) {
     // 隐藏默认的顶栏菜单（File, Edit...），让 UI 更有 Notion 那种沉浸感
     // Menu.setApplicationMenu(null); 
 
-    const isDev = !app.isPackaged;
-    const targets = buildWindowUrl(noteId, detached);
+    const target = buildWindowTarget(noteId, detached);
 
     if (!detached) {
         mainWindow = win;
@@ -82,16 +96,16 @@ function createWindow(options = {}) {
         }
     });
 
-    if (isDev) {
-        win.loadURL(targets[0]).catch(() => {
-            win.loadURL(targets[1]).catch(() => {
-                win.loadFile(path.join(__dirname, 'dist/index.html'));
+    if (target.isDev) {
+        win.loadURL(target.urls[0]).catch(() => {
+            win.loadURL(target.urls[1]).catch(() => {
+                win.loadFile(target.filePath, { query: target.queryObject });
             });
         });
         // 开发模式自动打开调试工具
         win.webContents.openDevTools();
     } else {
-        win.loadFile(targets[0]);
+        win.loadFile(target.filePath, { query: target.queryObject });
     }
 
     win.webContents.on('context-menu', (event, params) => {
@@ -197,6 +211,23 @@ ipcMain.handle('security:prompt-touch-id', async (event, reason) => {
 });
 
 ipcMain.handle('security:can-prompt-touch-id', () => {
+    if (process.platform !== 'darwin') return false;
+    return systemPreferences.canPromptTouchID();
+});
+
+// Unified biometric auth channel for packaged builds.
+ipcMain.handle('auth:biometric', async (_event, reason = 'Unlock TomaNotes') => {
+    if (process.platform !== 'darwin') return false;
+    if (!systemPreferences.canPromptTouchID()) return false;
+    try {
+        await systemPreferences.promptTouchID(reason);
+        return true;
+    } catch (error) {
+        return false;
+    }
+});
+
+ipcMain.handle('auth:biometric-available', () => {
     if (process.platform !== 'darwin') return false;
     return systemPreferences.canPromptTouchID();
 });
