@@ -48,6 +48,7 @@ const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, 
   const { settings } = useSettings();
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const clearPinTimerRef = React.useRef(null);
 
   const handleKey = async (e) => {
     if (e.key === 'Backspace') {
@@ -64,7 +65,8 @@ const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, 
             setPin('');
           } else {
             setError(true);
-            setTimeout(() => setPin(''), 500);
+            if (clearPinTimerRef.current) clearTimeout(clearPinTimerRef.current);
+            clearPinTimerRef.current = setTimeout(() => setPin(''), 500);
           }
         }
       }
@@ -73,7 +75,10 @@ const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, 
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      if (clearPinTimerRef.current) clearTimeout(clearPinTimerRef.current);
+    };
   }, [pin]);
 
   const copy = reasonCopy[reason] || reasonCopy.unlock;

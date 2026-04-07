@@ -4,6 +4,7 @@ import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 // ── Individual Toast ──────────────────────────────────────────────────────────
 function ToastItem({ toast, onRemove }) {
   const [visible, setVisible] = useState(false);
+  const removeTimerRef = useRef(null);
 
   useEffect(() => {
     // Mount → slide in
@@ -11,9 +12,14 @@ function ToastItem({ toast, onRemove }) {
     // Auto-dismiss
     const t2 = setTimeout(() => {
       setVisible(false);
-      setTimeout(() => onRemove(toast.id), 300); // wait for slide-out
+      if (removeTimerRef.current) clearTimeout(removeTimerRef.current);
+      removeTimerRef.current = setTimeout(() => onRemove(toast.id), 300); // wait for slide-out
     }, toast.duration || 3500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (removeTimerRef.current) clearTimeout(removeTimerRef.current);
+    };
   }, []);
 
   const config = {
@@ -41,7 +47,11 @@ function ToastItem({ toast, onRemove }) {
         {toast.message}
       </span>
       <button
-        onClick={() => { setVisible(false); setTimeout(() => onRemove(toast.id), 300); }}
+        onClick={() => {
+          setVisible(false);
+          if (removeTimerRef.current) clearTimeout(removeTimerRef.current);
+          removeTimerRef.current = setTimeout(() => onRemove(toast.id), 300);
+        }}
         style={{
           border: 'none', background: 'transparent', cursor: 'pointer',
           color: config.color, padding: 2, display: 'flex', alignItems: 'center', flexShrink: 0,

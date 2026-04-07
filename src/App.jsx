@@ -273,6 +273,7 @@ function App() {
   const [showLaunchBrand, setShowLaunchBrand] = useState(true);
   const [isBooting, setIsBooting] = useState(true);
   const sidebarSearchRef = useRef(null);
+  const notesStorageSnapshotRef = useRef('');
   
   // Security
   const [contextMenu, setContextMenu] = useState(null); // { x, y, note }
@@ -305,7 +306,12 @@ function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('notes', JSON.stringify(notes));
+      const serialized = JSON.stringify(notes);
+      notesStorageSnapshotRef.current = serialized;
+      // Avoid redundant cross-window writes that can cause storage-event ping-pong.
+      if (localStorage.getItem('notes') !== serialized) {
+        localStorage.setItem('notes', serialized);
+      }
     } catch (e) {
       console.error('[Notes] Failed to persist notes:', e);
     }
@@ -314,10 +320,13 @@ function App() {
   useEffect(() => {
     const syncNotes = (event) => {
       if (event.key !== 'notes' || !event.newValue) return;
+      if (event.newValue === notesStorageSnapshotRef.current) return;
       try {
         const parsed = JSON.parse(event.newValue);
         const seen = new Set();
-        setNotes(parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(normalizeNote));
+        const normalized = parsed.filter(n => n && !seen.has(n.id) && seen.add(n.id)).map(normalizeNote);
+        notesStorageSnapshotRef.current = event.newValue;
+        setNotes(normalized);
       } catch (error) {
         console.error('[Notes] Failed to sync notes:', error);
       }
@@ -700,12 +709,10 @@ function App() {
     if (!note) return;
     // Detached windows also require authentication unless the note itself is protected
     // (protected note already has its own auth gate on open).
-    if (!isProtectedNote(note) && isSecurityEnabled) {
-      const allowed = await requireAuth({ reason: 'open-detached-window', force: true });
-      if (!allowed) return;
-    }
+    // Detached window itself should not force a second global-password prompt.
+    // Protected-note access is still guarded by the protected-note auth flow.
     await window.electron.window.detachNote(activeNoteId);
-  }, [activeNoteId, isProtectedNote, isSecurityEnabled, notes, requireAuth]);
+  }, [activeNoteId]);
   const handleRestoreDetachedNote = useCallback(async () => {
     if (!window.electron?.window?.restoreNote) return;
     await window.electron.window.restoreNote();

@@ -8,13 +8,18 @@ import { X, Check, ExternalLink } from 'lucide-react';
 const LinkModal = ({ isOpen, onClose, onSubmit, initialUrl }) => {
   const [url, setUrl] = useState(initialUrl || 'https://');
   const inputRef = useRef(null);
+  const focusTimerRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setUrl(initialUrl || 'https://');
       // Small delay so TipTap doesn't steal focus
-      setTimeout(() => inputRef.current?.focus(), 50);
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = setTimeout(() => inputRef.current?.focus(), 50);
     }
+    return () => {
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    };
   }, [isOpen, initialUrl]);
 
   if (!isOpen) return null;

@@ -306,9 +306,12 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
       }
     };
 
-    bridge.system.onBlur(handleBlur);
-    bridge.system.onFocus(handleFocus);
-    return undefined;
+    const offBlur = bridge.system.onBlur(handleBlur);
+    const offFocus = bridge.system.onFocus(handleFocus);
+    return () => {
+      if (typeof offBlur === 'function') offBlur();
+      if (typeof offFocus === 'function') offFocus();
+    };
   }, [getBridge, lockApp]);
 
   useEffect(() => {

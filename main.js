@@ -7,6 +7,7 @@ const settingsPath = path.join(userDataPath, 'security.json');
 let currentUiLanguage = 'zh-CN';
 let mainWindow = null;
 const detachedWindows = new Map();
+let sharedDetachedWindow = null;
 
 function saveSecurityConfig(data) {
     const existing = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
@@ -44,6 +45,17 @@ function buildWindowTarget(noteId, detached) {
     };
 }
 
+function loadWindowContent(win, target) {
+    if (target.isDev) {
+        return win.loadURL(target.urls[0]).catch(() => {
+            return win.loadURL(target.urls[1]).catch(() => {
+                return win.loadFile(target.filePath, { query: target.queryObject });
+            });
+        });
+    }
+    return win.loadFile(target.filePath, { query: target.queryObject });
+}
+
 function createWindow(options = {}) {
     const { noteId = null, detached = false } = options;
     const win = new BrowserWindow({
@@ -69,6 +81,7 @@ function createWindow(options = {}) {
         mainWindow = win;
     } else if (noteId) {
         detachedWindows.set(Number(noteId), win);
+        sharedDetachedWindow = win;
     }
 
     // Force all external links to open in the system browser.
@@ -91,21 +104,20 @@ function createWindow(options = {}) {
         if (detached && noteId) {
             detachedWindows.delete(Number(noteId));
         }
+        if (detached && sharedDetachedWindow === win) {
+            sharedDetachedWindow = null;
+        }
         if (!detached && mainWindow === win) {
             mainWindow = null;
         }
     });
 
     if (target.isDev) {
-        win.loadURL(target.urls[0]).catch(() => {
-            win.loadURL(target.urls[1]).catch(() => {
-                win.loadFile(target.filePath, { query: target.queryObject });
-            });
-        });
+        loadWindowContent(win, target);
         // 开发模式自动打开调试工具
         win.webContents.openDevTools();
     } else {
-        win.loadFile(target.filePath, { query: target.queryObject });
+        loadWindowContent(win, target);
     }
 
     win.webContents.on('context-menu', (event, params) => {
@@ -244,11 +256,13 @@ ipcMain.handle('system:open-external', async (_event, url) => {
 
 ipcMain.handle('window:detach-note', (_event, noteId) => {
     const normalizedId = Number(noteId);
-    const existing = detachedWindows.get(normalizedId);
-    if (existing && !existing.isDestroyed()) {
-        if (existing.isMinimized()) existing.restore();
-        existing.show();
-        existing.focus();
+    // Reuse one detached editor window to avoid opening many heavy renderer processes.
+    if (sharedDetachedWindow && !sharedDetachedWindow.isDestroyed()) {
+        const target = buildWindowTarget(normalizedId, true);
+        loadWindowContent(sharedDetachedWindow, target);
+        if (sharedDetachedWindow.isMinimized()) sharedDetachedWindow.restore();
+        sharedDetachedWindow.show();
+        sharedDetachedWindow.focus();
         return true;
     }
     createWindow({ noteId: normalizedId, detached: true });

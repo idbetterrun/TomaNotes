@@ -14,8 +14,16 @@ const bridge = {
         biometricAvailable: () => ipcRenderer.invoke('auth:biometric-available'),
     },
     system: {
-        onBlur: (callback) => ipcRenderer.on('window-blur', callback),
-        onFocus: (callback) => ipcRenderer.on('window-focus', callback),
+        onBlur: (callback) => {
+            const listener = (_event, ...args) => callback(...args);
+            ipcRenderer.on('window-blur', listener);
+            return () => ipcRenderer.removeListener('window-blur', listener);
+        },
+        onFocus: (callback) => {
+            const listener = (_event, ...args) => callback(...args);
+            ipcRenderer.on('window-focus', listener);
+            return () => ipcRenderer.removeListener('window-focus', listener);
+        },
         setLanguage: (language) => ipcRenderer.send('ui:set-language', language),
         openExternal: (url) => ipcRenderer.invoke('system:open-external', url)
     },
