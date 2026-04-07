@@ -274,6 +274,7 @@ function App() {
   const [isBooting, setIsBooting] = useState(true);
   const sidebarSearchRef = useRef(null);
   const notesStorageSnapshotRef = useRef('');
+  const persistNotesTimerRef = useRef(null);
   
   // Security
   const [contextMenu, setContextMenu] = useState(null); // { x, y, note }
@@ -305,16 +306,29 @@ function App() {
   const isSecurityEnabled = securityState.enabled && securityState.hasPassword;
 
   useEffect(() => {
-    try {
-      const serialized = JSON.stringify(notes);
-      notesStorageSnapshotRef.current = serialized;
-      // Avoid redundant cross-window writes that can cause storage-event ping-pong.
-      if (localStorage.getItem('notes') !== serialized) {
-        localStorage.setItem('notes', serialized);
-      }
-    } catch (e) {
-      console.error('[Notes] Failed to persist notes:', e);
+    if (persistNotesTimerRef.current) {
+      window.clearTimeout(persistNotesTimerRef.current);
     }
+    // Debounce full-note persistence to avoid giant stringify churn on every keystroke.
+    persistNotesTimerRef.current = window.setTimeout(() => {
+      try {
+        const serialized = JSON.stringify(notes);
+        if (notesStorageSnapshotRef.current === serialized) return;
+        notesStorageSnapshotRef.current = serialized;
+        if (localStorage.getItem('notes') !== serialized) {
+          localStorage.setItem('notes', serialized);
+        }
+      } catch (e) {
+        console.error('[Notes] Failed to persist notes:', e);
+      }
+    }, 450);
+
+    return () => {
+      if (persistNotesTimerRef.current) {
+        window.clearTimeout(persistNotesTimerRef.current);
+        persistNotesTimerRef.current = null;
+      }
+    };
   }, [notes]);
 
   useEffect(() => {

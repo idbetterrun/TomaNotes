@@ -101,9 +101,9 @@ function getToolbarState(editor) {
 // ── toBase64 utility: converts a File to Base64 DataURL with error handling ──
 function toBase64(file) {
   return new Promise((resolve, reject) => {
-    // Reject files larger than 10MB to prevent crashes
-    if (file.size > 10 * 1024 * 1024) {
-      reject(new Error(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 10 MB.`));
+    // Guard memory usage: large Base64 payloads + editor history can quickly explode RAM.
+    if (file.size > 4 * 1024 * 1024) {
+      reject(new Error(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 4 MB.`));
       return;
     }
     const reader = new FileReader();
@@ -366,7 +366,8 @@ const RichTextEditor = ({ note, onChange, onTitleChange, onActionsChange }) => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: { depth: 100 }, dropCursor: { color: '#4f46e5', width: 2 } }),
+      // Lower history depth to reduce memory pressure for long rich-text sessions.
+      StarterKit.configure({ history: { depth: 30 }, dropCursor: { color: '#4f46e5', width: 2 } }),
       Underline,
       Typography,
       TextStyle,
