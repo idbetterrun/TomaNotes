@@ -57,7 +57,7 @@ export const dictionary = {
     profileLabel: 'Profile',
     syncDescription: 'Sync your notes everywhere',
     createdAt: 'Created at',
-    version: 'Version: v0.1.3',
+    version: 'Version: v0.2.0',
     allNotes: 'All Notes',
     favorites: 'Favorites',
     trash: 'Trash',
