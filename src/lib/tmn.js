@@ -65,7 +65,7 @@ function mdToPlainSummary(md) {
 
 const SUMMARY_MAX = 60;
 
-export function noteToContentJson(note, appVersion = '0.1.3') {
+export function noteToContentJson(note, appVersion = '0.2.0') {
   const format = note.type === 'markdown' ? 'markdown' : 'html';
   const isProtected = !!(note.protected ?? note.encrypted);
   const plainContent = format === 'html' ? htmlToPlainText(note.content || '') : (note.content || '');
@@ -190,7 +190,7 @@ export function contentJsonToNote(contentJson, { preserveAppData = true } = {}) 
   };
 }
 
-export async function packNote(note, appVersion = '0.1.3') {
+export async function packNote(note, appVersion = '0.2.0') {
   const zip = new JSZip();
   const contentJson = noteToContentJson(note, appVersion);
   const docId = contentJson.id;
