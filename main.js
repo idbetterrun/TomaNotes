@@ -1,12 +1,70 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, safeStorage, systemPreferences, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
-function createWindow() {
+const userDataPath = app.getPath('userData');
+const settingsPath = path.join(userDataPath, 'security.json');
+let currentUiLanguage = 'zh-CN';
+let mainWindow = null;
+const detachedWindows = new Map();
+let sharedDetachedWindow = null;
+
+function saveSecurityConfig(data) {
+    const existing = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
+    fs.writeFileSync(settingsPath, JSON.stringify({ ...existing, ...data }));
+}
+function getSecurityConfig() {
+    return fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
+}
+
+function buildWindowTarget(noteId, detached) {
+    const isDev = !app.isPackaged;
+    const search = new URLSearchParams();
+    const windowType = detached ? 'editor' : 'main';
+    search.set('windowType', windowType);
+    if (noteId) search.set('note', String(noteId));
+    if (detached) {
+        search.set('detached', '1');
+        search.set('editor', '1');
+    }
+
+    if (isDev) {
+        const query = search.toString();
+        return {
+            isDev: true,
+            urls: [`http://localhost:5173/?${query}`, `http://localhost:5174/?${query}`],
+            filePath: path.join(__dirname, 'dist/index.html'),
+            queryObject: Object.fromEntries(search.entries()),
+        };
+    }
+
+    return {
+        isDev: false,
+        filePath: path.join(__dirname, 'dist/index.html'),
+        queryObject: Object.fromEntries(search.entries()),
+    };
+}
+
+function loadWindowContent(win, target) {
+    if (target.isDev) {
+        return win.loadURL(target.urls[0]).catch(() => {
+            return win.loadURL(target.urls[1]).catch(() => {
+                return win.loadFile(target.filePath, { query: target.queryObject });
+            });
+        });
+    }
+    return win.loadFile(target.filePath, { query: target.queryObject });
+}
+
+function createWindow(options = {}) {
+    const { noteId = null, detached = false } = options;
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
         title: "TomaNotes", // 任务栏显示的标题
         icon: path.join(__dirname, 'public/icon.ico'), // 给你的 Windows 版加个图标
+        titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
+        trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 32 } : undefined,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -17,21 +75,212 @@ function createWindow() {
     // 隐藏默认的顶栏菜单（File, Edit...），让 UI 更有 Notion 那种沉浸感
     // Menu.setApplicationMenu(null); 
 
-    const isDev = !app.isPackaged;
+    const target = buildWindowTarget(noteId, detached);
 
-    if (isDev) {
-        // 智能侦测 Vite 端口，增加容错
-        win.loadURL('http://localhost:5173').catch(() => {
-            win.loadURL('http://localhost:5174').catch(() => {
-                win.loadFile(path.join(__dirname, 'dist/index.html'));
-            });
-        });
+    if (!detached) {
+        mainWindow = win;
+    } else if (noteId) {
+        detachedWindows.set(Number(noteId), win);
+        sharedDetachedWindow = win;
+    }
+
+    // Force all external links to open in the system browser.
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) {
+            shell.openExternal(url);
+            return { action: 'deny' };
+        }
+        return { action: 'allow' };
+    });
+
+    win.webContents.on('will-navigate', (event, url) => {
+        if (/^https?:\/\//i.test(url)) {
+            event.preventDefault();
+            shell.openExternal(url);
+        }
+    });
+
+    win.on('closed', () => {
+        if (detached && noteId) {
+            detachedWindows.delete(Number(noteId));
+        }
+        if (detached && sharedDetachedWindow === win) {
+            sharedDetachedWindow = null;
+        }
+        if (!detached && mainWindow === win) {
+            mainWindow = null;
+        }
+    });
+
+    if (target.isDev) {
+        loadWindowContent(win, target);
         // 开发模式自动打开调试工具
         win.webContents.openDevTools();
     } else {
-        win.loadFile(path.join(__dirname, 'dist/index.html'));
+        loadWindowContent(win, target);
     }
+
+    win.webContents.on('context-menu', (event, params) => {
+        const labels = currentUiLanguage === 'en'
+            ? {
+                undo: 'Undo',
+                redo: 'Redo',
+                cut: 'Cut',
+                copy: 'Copy',
+                paste: 'Paste',
+                pasteMatch: 'Paste and Match Style',
+                del: 'Delete',
+                selectAll: 'Select All',
+                services: 'Services',
+            }
+            : currentUiLanguage === 'zh-TW'
+            ? {
+                undo: '復原',
+                redo: '重做',
+                cut: '剪下',
+                copy: '複製',
+                paste: '貼上',
+                pasteMatch: '貼上並符合樣式',
+                del: '刪除',
+                selectAll: '全選',
+                services: '服務',
+            }
+            : {
+                undo: '撤销',
+                redo: '重做',
+                cut: '剪切',
+                copy: '复制',
+                paste: '粘贴',
+                pasteMatch: '粘贴并匹配样式',
+                del: '删除',
+                selectAll: '全选',
+                services: '服务',
+            };
+        const template = [
+            { label: labels.undo, accelerator: 'CmdOrCtrl+Z', click: () => win.webContents.undo() },
+            { label: labels.redo, accelerator: 'Shift+CmdOrCtrl+Z', click: () => win.webContents.redo() },
+            { type: 'separator' },
+            { label: labels.cut, accelerator: 'CmdOrCtrl+X', role: 'cut' },
+            { label: labels.copy, accelerator: 'CmdOrCtrl+C', role: 'copy' },
+            { label: labels.paste, accelerator: 'CmdOrCtrl+V', role: 'paste' },
+            { label: labels.pasteMatch, accelerator: 'Shift+CmdOrCtrl+V', role: 'pasteAndMatchStyle' },
+            { label: labels.del, role: 'delete' },
+            { label: labels.selectAll, accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
+        ];
+        
+        if (process.platform === 'darwin') {
+            template.push({ type: 'separator' });
+            template.push({ label: labels.services, role: 'services' });
+        }
+
+        const menu = Menu.buildFromTemplate(template);
+        menu.popup({ window: win, x: params.x, y: params.y });
+    });
+
+    win.on('blur', () => win.webContents.send('window-blur'));
+    win.on('focus', () => win.webContents.send('window-focus'));
 }
+
+// --- 安全通信机制 ---
+ipcMain.handle('security:set-pin', (event, pin) => {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    const buffer = safeStorage.encryptString(pin);
+    saveSecurityConfig({ pin: buffer.toString('hex') });
+    return true;
+});
+
+ipcMain.handle('security:verify-pin', (event, pin) => {
+    const config = getSecurityConfig();
+    if (!config.pin) return false;
+    try {
+        const decrypted = safeStorage.decryptString(Buffer.from(config.pin, 'hex'));
+        return decrypted === pin;
+    } catch(e) {
+        return false;
+    }
+});
+
+ipcMain.handle('security:has-pin', () => {
+    const config = getSecurityConfig();
+    return !!config.pin;
+});
+
+ipcMain.handle('security:clear-pin', () => {
+    saveSecurityConfig({ pin: null });
+    return true;
+});
+
+ipcMain.handle('security:prompt-touch-id', async (event, reason) => {
+    if (process.platform === 'darwin' && systemPreferences.canPromptTouchID()) {
+        try {
+            await systemPreferences.promptTouchID(reason);
+            return true;
+        } catch(e) {
+            return false;
+        }
+    }
+    return false;
+});
+
+ipcMain.handle('security:can-prompt-touch-id', () => {
+    if (process.platform !== 'darwin') return false;
+    return systemPreferences.canPromptTouchID();
+});
+
+// Unified biometric auth channel for packaged builds.
+ipcMain.handle('auth:biometric', async (_event, reason = 'Unlock TomaNotes') => {
+    if (process.platform !== 'darwin') return false;
+    if (!systemPreferences.canPromptTouchID()) return false;
+    try {
+        await systemPreferences.promptTouchID(reason);
+        return true;
+    } catch (error) {
+        return false;
+    }
+});
+
+ipcMain.handle('auth:biometric-available', () => {
+    if (process.platform !== 'darwin') return false;
+    return systemPreferences.canPromptTouchID();
+});
+
+ipcMain.on('ui:set-language', (_event, language) => {
+    currentUiLanguage = language || 'zh-CN';
+});
+
+ipcMain.handle('system:open-external', async (_event, url) => {
+    if (!url || !/^https?:\/\//i.test(url)) return false;
+    await shell.openExternal(url);
+    return true;
+});
+
+ipcMain.handle('window:detach-note', (_event, noteId) => {
+    const normalizedId = Number(noteId);
+    // Reuse one detached editor window to avoid opening many heavy renderer processes.
+    if (sharedDetachedWindow && !sharedDetachedWindow.isDestroyed()) {
+        const target = buildWindowTarget(normalizedId, true);
+        loadWindowContent(sharedDetachedWindow, target);
+        if (sharedDetachedWindow.isMinimized()) sharedDetachedWindow.restore();
+        sharedDetachedWindow.show();
+        sharedDetachedWindow.focus();
+        return true;
+    }
+    createWindow({ noteId: normalizedId, detached: true });
+    return true;
+});
+
+ipcMain.handle('window:restore-note', (event) => {
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+    }
+    if (sourceWindow && sourceWindow !== mainWindow && !sourceWindow.isDestroyed()) {
+        sourceWindow.close();
+    }
+    return true;
+});
 
 // --- macOS 专属生命周期处理 ---
 

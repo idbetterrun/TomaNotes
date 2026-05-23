@@ -20,6 +20,7 @@ const SearchModule = ({ isOpen, onClose, onSearch, onNext, onPrev, totalResults,
   };
 
   const handleInputChange = (e) => {
+    e.stopPropagation();
     const val = e.target.value;
     setSearchTerm(val);
     onSearch(val);

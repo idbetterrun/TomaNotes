@@ -1,0 +1,131 @@
+const { app, BrowserWindow, Menu, ipcMain, safeStorage, systemPreferences } = require('electron');
+const path = require('path');
+const fs = require('fs');
+
+const userDataPath = app.getPath('userData');
+const settingsPath = path.join(userDataPath, 'security.json');
+
+function saveSecurityConfig(data) {
+    const existing = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
+    fs.writeFileSync(settingsPath, JSON.stringify({ ...existing, ...data }));
+}
+function getSecurityConfig() {
+    return fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath)) : {};
+}
+
+function createWindow() {
+    const win = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        title: "TomaNotes", // 任务栏显示的标题
+        icon: path.join(__dirname, 'public/icon.ico'), // 给你的 Windows 版加个图标
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js') // 建议预留这个文件处理原生交互
+        }
+    });
+
+    // 隐藏默认的顶栏菜单（File, Edit...），让 UI 更有 Notion 那种沉浸感
+    // Menu.setApplicationMenu(null); 
+
+    const isDev = !app.isPackaged;
+
+    if (isDev) {
+        // 智能侦测 Vite 端口，增加容错
+        win.loadURL('http://localhost:5173').catch(() => {
+            win.loadURL('http://localhost:5174').catch(() => {
+                win.loadFile(path.join(__dirname, 'dist/index.html'));
+            });
+        });
+        // 开发模式自动打开调试工具
+        win.webContents.openDevTools();
+    } else {
+        win.loadFile(path.join(__dirname, 'dist/index.html'));
+    }
+
+    win.webContents.on('context-menu', (event, params) => {
+        const template = [
+            { role: 'undo' },
+            { role: 'redo' },
+            { type: 'separator' },
+            { role: 'cut' },
+            { role: 'copy' },
+            { role: 'paste' },
+            { role: 'pasteAndMatchStyle' },
+            { role: 'delete' },
+            { role: 'selectAll' }
+        ];
+        
+        if (process.platform === 'darwin') {
+            template.push({ type: 'separator' });
+            template.push({ role: 'services' });
+        }
+
+        const menu = Menu.buildFromTemplate(template);
+        menu.popup({ window: win, x: params.x, y: params.y });
+    });
+
+    win.on('blur', () => win.webContents.send('window-blur'));
+    win.on('focus', () => win.webContents.send('window-focus'));
+}
+
+// --- 安全通信机制 ---
+ipcMain.handle('security:set-pin', (event, pin) => {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    const buffer = safeStorage.encryptString(pin);
+    saveSecurityConfig({ pin: buffer.toString('hex') });
+    return true;
+});
+
+ipcMain.handle('security:verify-pin', (event, pin) => {
+    const config = getSecurityConfig();
+    if (!config.pin) return false;
+    try {
+        const decrypted = safeStorage.decryptString(Buffer.from(config.pin, 'hex'));
+        return decrypted === pin;
+    } catch(e) {
+        return false;
+    }
+});
+
+ipcMain.handle('security:has-pin', () => {
+    const config = getSecurityConfig();
+    return !!config.pin;
+});
+
+ipcMain.handle('security:clear-pin', () => {
+    saveSecurityConfig({ pin: null });
+    return true;
+});
+
+ipcMain.handle('security:prompt-touch-id', async (event, reason) => {
+    if (process.platform === 'darwin' && systemPreferences.canPromptTouchID()) {
+        try {
+            await systemPreferences.promptTouchID(reason);
+            return true;
+        } catch(e) {
+            return false;
+        }
+    }
+    return false;
+});
+
+ipcMain.handle('security:can-prompt-touch-id', () => {
+    if (process.platform !== 'darwin') return false;
+    return systemPreferences.canPromptTouchID();
+});
+
+// --- macOS 专属生命周期处理 ---
+
+// 1. 当所有窗口都被关闭时，退出应用（Windows/Linux 习惯）
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+});
+
+// 2. 在 macOS 上，点击程序坞图标如果没有窗口则新建一个（Mac 习惯）
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+app.whenReady().then(createWindow);
