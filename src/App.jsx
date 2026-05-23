@@ -3,7 +3,7 @@ import {
   FileBox, Star, Trash2, Settings, Plus, Search,
   FileText, Code, Download, Trash, RefreshCw,
   Pin, MoreHorizontal, Lock, Unlock, Eye, EyeOff,
-  PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Tags, X, Info
+  PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Tags, X, Info, Upload
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { enUS, zhCN, zhTW } from 'date-fns/locale';
@@ -19,6 +19,7 @@ import { ToastContainer, useToast } from './components/Toast';
 import { useSettings, useTranslation } from './context/SettingsContext';
 import { useSecurityManager } from './hooks/useSecurityManager';
 import { useNoteSearch } from './hooks/useNoteSearch';
+import { packNote, unpackTmn, contentJsonToNote } from './lib/tmn';
 
 const FONT_SIZE_PRESETS_CN = [
   { label: '小四', px: 12 },
@@ -43,6 +44,7 @@ const normalizeNote = (note) => {
     tags: note?.tags ?? [],
     modifiedAt: note?.modifiedAt ?? note?.createdAt,
     lastOpenedAt: note?.lastOpenedAt ?? note?.createdAt,
+    uuid: note?.uuid ?? crypto.randomUUID(),
   };
 };
 
@@ -114,7 +116,7 @@ function NewNoteDropdown({ onCreate, variant = 'rail' }) {
   );
 }
 
-function ProtectedNotePrompt({ title, onAuthenticate, t, lang }) {
+function ProtectedNotePrompt({ title, onAuthenticate, onDismiss, t, lang }) {
   return (
     <div style={{
       minHeight: 420,
@@ -151,25 +153,47 @@ function ProtectedNotePrompt({ title, onAuthenticate, t, lang }) {
         <div style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 22 }}>
           {lang === 'en' ? 'This protected note needs password verification before previewing.' : lang === 'zh-TW' ? '這篇受保護筆記需要先完成密碼驗證才能預覽。' : '这篇受保护笔记需要先完成密码验证才能预览。'}
         </div>
-        <button
-          onClick={onAuthenticate}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '11px 16px',
-            borderRadius: 999,
-            border: '1px solid var(--border-color)',
-            background: 'var(--accent)',
-            color: '#fff',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          <Lock size={14} />
-          {lang === 'en' ? 'Verify to view' : lang === 'zh-TW' ? '驗證後查看' : '验证后查看'}
-        </button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={onAuthenticate}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '11px 16px',
+              borderRadius: 999,
+              border: '1px solid var(--border-color)',
+              background: 'var(--accent)',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            <Lock size={14} />
+            {lang === 'en' ? 'Verify to view' : lang === 'zh-TW' ? '驗證後查看' : '验证后查看'}
+          </button>
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '11px 16px',
+                borderRadius: 999,
+                border: '1px solid var(--border-color)',
+                background: 'var(--surface-primary)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {lang === 'en' ? 'Go back' : lang === 'zh-TW' ? '返回' : '返回'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -286,6 +310,7 @@ function App() {
     securityState,
     requireAuth,
     lockApp,
+    cancelAuth,
     enablePassword,
     disablePassword,
     enableBiometric,
@@ -549,6 +574,7 @@ function App() {
     const now = new Date().toISOString();
     const n = {
       id: Date.now(), title: '', content: '', type,
+      uuid: crypto.randomUUID(),
       isFavorite: false, isDeleted: false, isPinned: false,
       encrypted: false, protected: false, starred: false,
       tags: [],
@@ -642,13 +668,20 @@ function App() {
 
   const handlePin = (id) => update(id, { isPinned: !notes.find(n => n.id === id)?.isPinned });
 
-  const handleToggleEncryption = useCallback((note) => {
+  const handleToggleEncryption = useCallback(async (note) => {
     if (!note) return;
     if (!isSecurityEnabled) {
       toast(t('globalPinDesc') || 'Enable global PIN first.', 'error');
       return;
     }
     const nextProtected = !isProtectedNote(note);
+
+    // Require authentication when turning off protection on a locked note
+    if (!nextProtected && protectedPreviewNoteId === note.id) {
+      const allowed = await requireAuth({ reason: 'protected-note', force: true });
+      if (!allowed) return;
+    }
+
     update(note.id, { encrypted: nextProtected, protected: nextProtected });
     if (nextProtected && activeNoteId === note.id) {
       setProtectedPreviewNoteId(note.id);
@@ -657,7 +690,7 @@ function App() {
       setProtectedPreviewNoteId(null);
     }
     toast(nextProtected ? (t('encryptNoteTitle') || 'Protected note enabled.') : (t('unlockNote') || 'Protected note disabled.'), 'success');
-  }, [activeNoteId, isProtectedNote, isSecurityEnabled, protectedPreviewNoteId, t, toast]);
+  }, [activeNoteId, isProtectedNote, isSecurityEnabled, protectedPreviewNoteId, requireAuth, t, toast]);
 
   // Trigger file download using native <a> tag
   const downloadFile = useCallback((content, filename, mimeType) => {
@@ -685,24 +718,73 @@ function App() {
         const allowed = await requireAuth({ reason: 'protected-note', force: true });
         if (!allowed) return;
       }
-      // Rich text: export directly as .txt (strip HTML)
-      if (note.type !== 'markdown') {
-        const stripped = note.content.replace(/<[^>]*>/g, '');
-        downloadFile(stripped, `${note.title || 'Untitled_Note'}.txt`);
-        return;
-      }
-      // Markdown: open clean UI modal to choose .md or .txt
       setExportModal(note);
     })();
-  }, [downloadFile, isProtectedNote, requireAuth]);
+  }, [isProtectedNote, requireAuth]);
 
-  const handleExportWithFormat = useCallback((ext) => {
+  const handleExportWithFormat = useCallback(async (ext) => {
     if (!exportModal) return;
+
+    if (ext === 'tmn') {
+      try {
+        const { blob, filename } = await packNote(exportModal);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      } catch (err) {
+        console.error('[Export] Failed to export .tmn:', err);
+        toast(t('importFailed') || 'Export failed.', 'error');
+      }
+      setExportModal(null);
+      return;
+    }
+
     const content = exportModal.content;
-    const mimeType = ext === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8';
-    downloadFile(content, `${exportModal.title || 'Untitled_Note'}.${ext}`, mimeType);
+    if (ext === 'md') {
+      downloadFile(content, `${exportModal.title || 'Untitled_Note'}.md`, 'text/markdown;charset=utf-8');
+    } else {
+      const text = exportModal.type !== 'markdown' ? exportModal.content.replace(/<[^>]*>/g, '') : exportModal.content;
+      downloadFile(text, `${exportModal.title || 'Untitled_Note'}.txt`, 'text/plain;charset=utf-8');
+    }
     setExportModal(null);
-  }, [exportModal, downloadFile]);
+  }, [exportModal, downloadFile, t, toast]);
+
+  const importFileRef = useRef(null);
+
+  const handleImportClick = useCallback(() => {
+    importFileRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const { contentJson } = await unpackTmn(buffer);
+      const note = contentJsonToNote(contentJson);
+
+      const now = new Date().toISOString();
+      note.id = Date.now();
+      note.createdAt = note.createdAt || now;
+      note.modifiedAt = now;
+
+      setNotes(prev => [note, ...prev]);
+      setActiveNoteId(note.id);
+      setActiveView('notes');
+      toast(t('importSuccess') || 'Note imported successfully.', 'success');
+    } catch (err) {
+      console.error('[Import] Failed to import .tmn:', err);
+      toast(t('importFailed') || 'Failed to import note.', 'error');
+    }
+
+    e.target.value = '';
+  }, [t, toast]);
 
   const openContextMenu = useCallback((e, note) => {
     e.preventDefault();
@@ -746,17 +828,19 @@ function App() {
           canUseBiometric={settings.globalPinEnabled && settings.touchIdEnabled && securityState.pendingAuthMode !== 'password'}
           onUnlock={unlockWithPassword}
           onBiometricUnlock={() => unlockWithBiometric(getBiometricPromptMessage(securityState.pendingReason))}
+          onCancel={cancelAuth}
         />
       )}
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Export Modal (for Markdown format choice) */}
+      {/* Export Modal */}
       <ExportModal
         isOpen={!!exportModal}
         onClose={() => setExportModal(null)}
         onExport={handleExportWithFormat}
         noteTitle={exportModal?.title}
+        noteType={exportModal?.type || 'rich'}
       />
 
       {/* Context Menu (global, portal-like) */}
@@ -830,6 +914,16 @@ function App() {
           <button onClick={() => setIsSettingsOpen(true)} className="nav-item" title={t('settingsTitle')}>
             <Settings size={20} />
           </button>
+          <button onClick={handleImportClick} className="nav-item" title={t('importNote') || 'Import Note'}>
+            <Upload size={20} />
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".tmn"
+            onChange={handleImportFile}
+            style={{ display: 'none' }}
+          />
         </div>
       </nav>
 
@@ -1133,6 +1227,7 @@ function App() {
                   <ProtectedNotePrompt
                     title={activeNote.title}
                     onAuthenticate={() => handleAuthenticateProtectedNote(activeNote.id)}
+                    onDismiss={() => { setActiveNoteId(null); setProtectedPreviewNoteId(null); }}
                     t={t}
                     lang={lang}
                   />

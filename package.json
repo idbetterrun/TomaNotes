@@ -1,6 +1,6 @@
 {
   "name": "tomanotes",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "author": "Tan Qinghua <douyin@idbetterrun>",
   "description": "TomaNotes - Secure, encrypted knowledge base.",
   "main": "main.js",
@@ -109,6 +109,7 @@
     "date-fns": "^4.1.0",
     "electron-squirrel-startup": "^1.0.1",
     "framer-motion": "^12.38.0",
+    "jszip": "^3.10.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.7.0",
     "nanoid": "^5.1.7",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Lock, Cloud, Globe, Type, Code, Hash, Info, Heart, ChevronRight, Fingerprint, FileText } from 'lucide-react';
+import { X, User, Lock, Cloud, Globe, Type, Code, Hash, Info, ChevronRight, Fingerprint, FileText } from 'lucide-react';
 import { useSettings, useTranslation } from '../context/SettingsContext';
 import { useToast } from './Toast';
 import PinSetupModal from './PinSetupModal';
@@ -52,7 +52,6 @@ export default function SettingsModal({ isOpen, onClose, notes, securityState, o
   const switchTrack = (enabled) => enabled ? 'var(--accent)' : 'var(--bg-secondary)';
   const hoverSurface = 'color-mix(in srgb, var(--surface-primary) 82%, var(--accent-soft) 18%)';
   const dangerSoft = 'color-mix(in srgb, #ef4444 16%, var(--surface-primary) 84%)';
-  const dangerText = 'color-mix(in srgb, #ef4444 84%, var(--text-main) 16%)';
   return (
     <div
       style={{
@@ -622,36 +621,38 @@ export default function SettingsModal({ isOpen, onClose, notes, securityState, o
                 }}>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>{t('developer')}</div>
+                    <a href="mailto:douyin@idbetterrun" style={{ color: 'var(--accent)', textDecoration: 'none' }}>douyin@idbetterrun</a>
                   </div>
                   
                   <div style={{ height: 1, background: 'var(--border-color)', width: '100%' }} />
                   
-                  <button 
-                    onClick={() => setActiveTab('credits')}
-                    style={{ 
-                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      background: 'transparent', border: 'none', cursor: 'pointer', padding: 0
-                    }}
-                  >
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Heart size={16} color={dangerText} fill={dangerText} opacity={0.8} />
-                      <span>{t('creditsTitle') || 'Credits'}</span>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>{t('contactEmail') || 'Contact'}</div>
+                    <a href="mailto:woxiantao@iCloud.com" style={{ color: 'var(--accent)', textDecoration: 'none' }}>woxiantao@iCloud.com</a>
+                  </div>
+                  
+                  <div style={{ height: 1, background: 'var(--border-color)', width: '100%' }} />
+                  
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>{t('notieeRecommend') || 'Also by the developer'}</div>
+                    <a href="https://github.com/idbetterrun/notiee" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      Notiee
+                      <span style={{ fontSize: 11, opacity: 0.6 }}>↗</span>
+                    </a>
+                    <div style={{ marginTop: 2, fontSize: 11, opacity: 0.7 }}>{t('notieeDesc') || 'AI-powered photo note for iOS. Same developer, new work.'}</div>
+                  </div>
+                  
+                  <div style={{ height: 1, background: 'var(--border-color)', width: '100%' }} />
+                  
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: 8, fontSize: 13 }}>{t('openSourceTitle') || 'Open Source'}</div>
+                    {t('openSourceNotice') || 'This project is built with:'}
+                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                      {['Electron', 'React', 'Vite', 'Tiptap', 'CodeMirror', 'Tailwind CSS', 'Framer Motion', 'Lucide', 'date-fns', 'JSZip'].map(lib => (
+                        <span key={lib} style={{ color: 'var(--text-subtle)' }}>{lib}</span>
+                      ))}
                     </div>
-                    <ChevronRight size={16} color="var(--text-subtle)" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Credits Sub-tab */}
-            {activeTab === 'credits' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <button onClick={() => setActiveTab('about')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 14, padding: 0 }}>
-                   <ChevronRight style={{ transform: 'rotate(180deg)' }} size={16} /> {t('back')}
-                </button>
-                <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{t('creditsTitle') || 'Credits'}</h2>
-                <div style={{ background: 'var(--surface-primary)', padding: 24, borderRadius: 16, border: '1px solid var(--border-color)', lineHeight: 1.6, fontSize: 14, color: 'var(--text-muted)' }}>
-                   {t('credits')}
+                  </div>
                 </div>
               </div>
             )}

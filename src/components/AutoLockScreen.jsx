@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation, useSettings } from '../context/SettingsContext';
-import { Fingerprint, Lock } from 'lucide-react';
+import { Fingerprint, Lock, ArrowLeft } from 'lucide-react';
 
 const reasonCopy = {
   startup: {
@@ -43,7 +43,7 @@ const reasonCopy = {
   },
 };
 
-const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, onBiometricUnlock }) => {
+const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, onBiometricUnlock, onCancel }) => {
   const { t, lang } = useTranslation();
   const { settings } = useSettings();
   const [pin, setPin] = useState('');
@@ -177,6 +177,32 @@ const AutoLockScreen = ({ reason = 'unlock', canUseBiometric = false, onUnlock, 
           <p style={{ color: '#ef4444', fontSize: 13, margin: canUseBiometric ? 0 : '2px 0 0', fontWeight: 600 }}>
             {t('incorrectPin') || 'Incorrect PIN, please try again'}
           </p>
+        )}
+
+        {(reason === 'protected-note' || reason === 'trash' || reason === 'delete-protected-note') && onCancel && (
+          <button
+            onClick={onCancel}
+            style={{
+              marginTop: 20,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 500,
+              padding: '8px 14px',
+              borderRadius: 8,
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-main)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            <ArrowLeft size={14} />
+            {lang === 'en' ? 'Cancel' : lang === 'zh-TW' ? '取消' : '取消'}
+          </button>
         )}
       </div>
     </div>

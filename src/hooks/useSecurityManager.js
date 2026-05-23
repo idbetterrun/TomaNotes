@@ -328,10 +328,22 @@ export function useSecurityManager({ enabled, autoLockMinutes, biometricEnabled,
     return () => window.clearInterval(timer);
   }, [lockApp, securityState.autoLockMinutes, securityState.enabled, securityState.isAuthenticated, securityState.isLocked]);
 
+  const cancelAuth = useCallback(() => {
+    updateSecurityState({
+      isLocked: false,
+      isAuthenticated: true,
+      pendingReason: null,
+      pendingAuthMode: 'default',
+      unlockMethod: null,
+    });
+    resolvePendingAuth(false);
+  }, [resolvePendingAuth, updateSecurityState]);
+
   return {
     securityState,
     requireAuth,
     lockApp,
+    cancelAuth,
     recordActivity,
     unlockWithPassword,
     enablePassword,
